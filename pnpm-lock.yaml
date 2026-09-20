@@ -41,6 +41,21 @@ importers:
         specifier: workspace:*
         version: link:../market-data
 
+  packages/setup-engine:
+    dependencies:
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/market-data':
+        specifier: workspace:*
+        version: link:../market-data
+      '@ulte/regime-engine':
+        specifier: workspace:*
+        version: link:../regime-engine
+      '@ulte/structure-engine':
+        specifier: workspace:*
+        version: link:../structure-engine
+
   packages/structure-engine:
     dependencies:
       '@ulte/instrument-model':

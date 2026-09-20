@@ -36,6 +36,7 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
 - `backtest-engine` owns deterministic historical replay and reuses `market-data` candle processing.
 - `trading-core` owns shared strategy contracts and deterministic trading semantics used by both live and backtest paths.
 - `regime-engine`, `structure-engine`, `setup-engine`, and `prediction-engine` provide focused analysis capabilities without UI dependencies.
+- `setup-engine` consumes public regime and structure evidence plus closed setup-timeframe candles; it emits setup candidates, not executable trade signals.
 - `risk-engine` is the deterministic authority for execution approval and enforces configured constraints, including the official net RR floor.
 - `execution-engine` coordinates idempotent, auditable execution requests only after risk approval.
 - `broker-adapters` isolates venue-specific protocols and credentials.
