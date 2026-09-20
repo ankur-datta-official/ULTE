@@ -15,6 +15,15 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7
 
+  packages/backtest-engine:
+    dependencies:
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/market-data':
+        specifier: workspace:*
+        version: link:../market-data
+
   packages/instrument-model: {}
 
   packages/market-data:

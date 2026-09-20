@@ -4,6 +4,7 @@
   "files": [],
   "references": [
     { "path": "./packages/instrument-model" },
-    { "path": "./packages/market-data" }
+    { "path": "./packages/market-data" },
+    { "path": "./packages/backtest-engine" }
   ]
 }

@@ -33,6 +33,7 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
 
 - `instrument-model` defines canonical instruments and decimal-safe domain values.
 - `market-data` owns normalized market-data contracts and quality semantics.
+- `backtest-engine` owns deterministic historical replay and reuses `market-data` candle processing.
 - `trading-core` owns shared strategy contracts and deterministic trading semantics used by both live and backtest paths.
 - `regime-engine`, `structure-engine`, `setup-engine`, and `prediction-engine` provide focused analysis capabilities without UI dependencies.
 - `risk-engine` is the deterministic authority for execution approval and enforces configured constraints, including the official net RR floor.
@@ -47,4 +48,3 @@ Dependencies flow from applications and adapters toward stable domain contracts.
 All internal times are UTC. Financial values use decimal-safe representations. Missing or stale data is explicit and must never be silently replaced. Secrets remain server-side. Material decisions and execution events must eventually be traceable through durable audit records.
 
 Python research code may explore ideas, but a production rule requires an explicit, tested implementation in the shared trading core. See the decision records in `docs/decisions/` for the governing rationale.
-
