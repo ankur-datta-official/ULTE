@@ -2,6 +2,8 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.base.json",
   "files": [],
-  "references": []
+  "references": [
+    { "path": "./packages/instrument-model" },
+    { "path": "./packages/market-data" }
+  ]
 }
-

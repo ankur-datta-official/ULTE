@@ -19,6 +19,7 @@
 - Domain and infrastructure capabilities: instrument modeling, market data, trading core, regime analysis, structure/liquidity analysis, setup evaluation, statistical prediction, risk, execution, and broker/exchange adapters.
 - Research capabilities: feature research, backtesting, notebooks, and historical validation.
 - Support for multiple asset classes and trading venues.
+- Phase 1 defines venue-neutral instrument identity, decimal-string values, Unix-millisecond time, fixed-duration timeframes, explicit market-data capabilities, and normalized market-data event contracts.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
@@ -34,4 +35,3 @@
 - User roles, authentication, authorization, dashboard behavior, and extension UX.
 - Service-level objectives, deployment topology, retention periods, and operational budgets.
 - Regulatory, legal, compliance, and reporting requirements.
-

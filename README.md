@@ -2,7 +2,7 @@
 
 ULTE (Universal Live Trading Engine) is a planned multi-application platform for research, signal generation, risk-controlled execution, and trading operations across multiple instruments and venues.
 
-This repository currently contains **Phase 0 only**: the engineering foundation. It intentionally contains no strategies, integrations, data pipelines, execution paths, or user interfaces.
+This repository contains the Phase 0 engineering foundation and the Phase 1 venue-neutral instrument and market-data domain model. It intentionally contains no strategies, integrations, data pipelines, execution paths, or user interfaces.
 
 ## Repository guide
 
@@ -27,4 +27,3 @@ This repository currently contains **Phase 0 only**: the engineering foundation.
 - TypeScript with strict shared defaults
 
 Install dependencies only when an implementation phase requires them. After pnpm is available, `pnpm install` will create the lockfile and install the declared TypeScript toolchain.
-
