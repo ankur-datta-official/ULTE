@@ -25,10 +25,11 @@
 - Containerization and continuous integration in later engineering phases.
 - Position trading first, with intraday and scalping modes considered only in later phases.
 - Account-level capital eligibility uses explicit caller-configured per-trade, aggregate, concurrent-position, daily-loss, and risk-group limits after structural risk qualification; it does not calculate quantity or authorize execution.
+- Position sizing converts an approved requested monetary-risk budget into an exact step-aligned quantity under an explicit linear PnL specification and optional point-in-time FX conversion; it cannot increase approved risk or authorize execution.
 
 ## Not yet specified
 
-- Trading strategies, entry/exit rules, position sizing, and instrument eligibility beyond the explicitly documented V1 portfolio capital limits.
+- Trading strategies, entry/exit rules, and instrument eligibility beyond the explicitly documented V1 portfolio capital and linear position-sizing limits.
 - Supported asset classes, exchanges, brokers, symbols, markets, and jurisdictions.
 - Market-data vendors, required feeds, canonical data formats, and fallback policies.
 - Regime, structure, liquidity, setup, prediction, and validation algorithms.

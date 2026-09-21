@@ -41,6 +41,18 @@ importers:
         specifier: workspace:*
         version: link:../risk-engine
 
+  packages/position-sizing-engine:
+    dependencies:
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/portfolio-risk-engine':
+        specifier: workspace:*
+        version: link:../portfolio-risk-engine
+      '@ulte/risk-engine':
+        specifier: workspace:*
+        version: link:../risk-engine
+
   packages/regime-engine:
     dependencies:
       '@ulte/instrument-model':
