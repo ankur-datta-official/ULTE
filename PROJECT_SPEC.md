@@ -27,6 +27,7 @@
 - Account-level capital eligibility uses explicit caller-configured per-trade, aggregate, concurrent-position, daily-loss, and risk-group limits after structural risk qualification; it does not calculate quantity or authorize execution.
 - Position sizing converts an approved requested monetary-risk budget into an exact step-aligned quantity under an explicit linear PnL specification and optional point-in-time FX conversion; it cannot increase approved risk or authorize execution.
 - Trade-intent orchestration requires a coherent same-time setup, structural-risk, portfolio-risk, and position-sizing chain and copies their authoritative values into a deterministic immutable handoff; it is not an order and cannot authorize execution.
+- Execution preparation validates freshness, current-market validity, and exact venue-neutral price/quantity representability before producing a deterministic broker-neutral plan; it does not round, submit, or authorize an order.
 
 ## Not yet specified
 
