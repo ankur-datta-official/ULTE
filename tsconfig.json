@@ -8,6 +8,7 @@
     { "path": "./packages/backtest-engine" },
     { "path": "./packages/regime-engine" },
     { "path": "./packages/structure-engine" },
-    { "path": "./packages/setup-engine" }
+    { "path": "./packages/setup-engine" },
+    { "path": "./packages/risk-engine" }
   ]
 }

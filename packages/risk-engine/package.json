@@ -1,0 +1,22 @@
+{
+  "name": "@ulte/risk-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ulte/instrument-model": "workspace:*",
+    "@ulte/market-data": "workspace:*",
+    "@ulte/setup-engine": "workspace:*",
+    "@ulte/structure-engine": "workspace:*"
+  }
+}
