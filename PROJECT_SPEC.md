@@ -24,10 +24,11 @@
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
 - Position trading first, with intraday and scalping modes considered only in later phases.
+- Account-level capital eligibility uses explicit caller-configured per-trade, aggregate, concurrent-position, daily-loss, and risk-group limits after structural risk qualification; it does not calculate quantity or authorize execution.
 
 ## Not yet specified
 
-- Trading strategies, entry/exit rules, position sizing, portfolio limits, and instrument eligibility.
+- Trading strategies, entry/exit rules, position sizing, and instrument eligibility beyond the explicitly documented V1 portfolio capital limits.
 - Supported asset classes, exchanges, brokers, symbols, markets, and jurisdictions.
 - Market-data vendors, required feeds, canonical data formats, and fallback policies.
 - Regime, structure, liquidity, setup, prediction, and validation algorithms.

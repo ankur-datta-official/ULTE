@@ -32,6 +32,15 @@ importers:
         specifier: workspace:*
         version: link:../instrument-model
 
+  packages/portfolio-risk-engine:
+    dependencies:
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/risk-engine':
+        specifier: workspace:*
+        version: link:../risk-engine
+
   packages/regime-engine:
     dependencies:
       '@ulte/instrument-model':
