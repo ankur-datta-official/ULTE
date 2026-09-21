@@ -26,6 +26,7 @@
 - Position trading first, with intraday and scalping modes considered only in later phases.
 - Account-level capital eligibility uses explicit caller-configured per-trade, aggregate, concurrent-position, daily-loss, and risk-group limits after structural risk qualification; it does not calculate quantity or authorize execution.
 - Position sizing converts an approved requested monetary-risk budget into an exact step-aligned quantity under an explicit linear PnL specification and optional point-in-time FX conversion; it cannot increase approved risk or authorize execution.
+- Trade-intent orchestration requires a coherent same-time setup, structural-risk, portfolio-risk, and position-sizing chain and copies their authoritative values into a deterministic immutable handoff; it is not an order and cannot authorize execution.
 
 ## Not yet specified
 

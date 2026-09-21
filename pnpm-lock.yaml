@@ -101,6 +101,24 @@ importers:
         specifier: workspace:*
         version: link:../market-data
 
+  packages/trade-intent-engine:
+    dependencies:
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/portfolio-risk-engine':
+        specifier: workspace:*
+        version: link:../portfolio-risk-engine
+      '@ulte/position-sizing-engine':
+        specifier: workspace:*
+        version: link:../position-sizing-engine
+      '@ulte/risk-engine':
+        specifier: workspace:*
+        version: link:../risk-engine
+      '@ulte/setup-engine':
+        specifier: workspace:*
+        version: link:../setup-engine
+
 packages:
 
   '@esbuild/aix-ppc64@0.28.2':

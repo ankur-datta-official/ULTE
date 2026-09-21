@@ -37,7 +37,7 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
 - `trading-core` owns shared strategy contracts and deterministic trading semantics used by both live and backtest paths.
 - `regime-engine`, `structure-engine`, `setup-engine`, and `prediction-engine` provide focused analysis capabilities without UI dependencies.
 - `setup-engine` consumes public regime and structure evidence plus closed setup-timeframe candles; it emits setup candidates, not executable trade signals.
-- `risk-engine` deterministically qualifies structural risk and enforces the official net RR floor; `portfolio-risk-engine` separately decides whether requested monetary risk fits explicit account-level capital policy; `position-sizing-engine` converts that approved requested risk into a conservative step-aligned quantity using explicit instrument economics. None of these results is an execution instruction.
+- `risk-engine` deterministically qualifies structural risk and enforces the official net RR floor; `portfolio-risk-engine` separately decides whether requested monetary risk fits explicit account-level capital policy; `position-sizing-engine` converts that approved requested risk into a conservative step-aligned quantity using explicit instrument economics. `trade-intent-engine` verifies and combines those authoritative outputs into a deterministic handoff snapshot without recalculating them. None of these results is an execution instruction.
 - `execution-engine` coordinates idempotent, auditable execution requests only after risk approval.
 - `broker-adapters` isolates venue-specific protocols and credentials.
 - `shared` contains genuinely cross-cutting primitives only; it must not become a miscellaneous domain package.
