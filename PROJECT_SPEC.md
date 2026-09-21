@@ -28,6 +28,7 @@
 - Position sizing converts an approved requested monetary-risk budget into an exact step-aligned quantity under an explicit linear PnL specification and optional point-in-time FX conversion; it cannot increase approved risk or authorize execution.
 - Trade-intent orchestration requires a coherent same-time setup, structural-risk, portfolio-risk, and position-sizing chain and copies their authoritative values into a deterministic immutable handoff; it is not an order and cannot authorize execution.
 - Execution preparation validates freshness, current-market validity, and exact venue-neutral price/quantity representability before producing a deterministic broker-neutral plan; it does not round, submit, or authorize an order.
+- Execution policy creates deterministic attempts and idempotent broker-neutral entry, protection, fill, and cancellation lifecycles from ready plans; protection can cover only confirmed fills and requires adapter-declared non-reversing exit safety.
 
 ## Not yet specified
 
@@ -35,7 +36,7 @@
 - Supported asset classes, exchanges, brokers, symbols, markets, and jurisdictions.
 - Market-data vendors, required feeds, canonical data formats, and fallback policies.
 - Regime, structure, liquidity, setup, prediction, and validation algorithms.
-- Execution workflows, order types, reconciliation rules, and failure recovery behavior.
+- Concrete venue order mappings, durable execution reconciliation, and failure recovery behavior.
 - User roles, authentication, authorization, dashboard behavior, and extension UX.
 - Service-level objectives, deployment topology, retention periods, and operational budgets.
 - Regulatory, legal, compliance, and reporting requirements.

@@ -13,6 +13,7 @@
     { "path": "./packages/portfolio-risk-engine" },
     { "path": "./packages/position-sizing-engine" },
     { "path": "./packages/trade-intent-engine" },
-    { "path": "./packages/execution-preparation-engine" }
+    { "path": "./packages/execution-preparation-engine" },
+    { "path": "./packages/execution-engine" }
   ]
 }

@@ -24,6 +24,15 @@ importers:
         specifier: workspace:*
         version: link:../market-data
 
+  packages/execution-engine:
+    dependencies:
+      '@ulte/execution-preparation-engine':
+        specifier: workspace:*
+        version: link:../execution-preparation-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+
   packages/execution-preparation-engine:
     dependencies:
       '@ulte/instrument-model':
