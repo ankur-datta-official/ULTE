@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/broker-adapters.test.ts"],
+  "references": [
+    { "path": "../instrument-model" },
+    { "path": "../execution-engine" }
+  ]
+}

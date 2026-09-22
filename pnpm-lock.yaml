@@ -24,6 +24,15 @@ importers:
         specifier: workspace:*
         version: link:../market-data
 
+  packages/broker-adapters:
+    dependencies:
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+
   packages/execution-engine:
     dependencies:
       '@ulte/execution-preparation-engine':

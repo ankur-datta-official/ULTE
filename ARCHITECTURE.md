@@ -39,7 +39,10 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
 - `setup-engine` consumes public regime and structure evidence plus closed setup-timeframe candles; it emits setup candidates, not executable trade signals.
 - `risk-engine` deterministically qualifies structural risk and enforces the official net RR floor; `portfolio-risk-engine` separately decides whether requested monetary risk fits explicit account-level capital policy; `position-sizing-engine` converts that approved requested risk into a conservative step-aligned quantity using explicit instrument economics. `trade-intent-engine` verifies and combines those authoritative outputs into a deterministic handoff snapshot without recalculating them. None of these results is an execution instruction.
 - `execution-preparation-engine` converts a ready trade intent plus an explicit current quote and venue-neutral constraints into an exact, broker-neutral execution plan without submitting it. `execution-engine` preserves that plan while coordinating immutable, idempotent entry, confirmed-fill protection, and cancellation lifecycles through capability-declared adapter contracts; it contains no venue implementation.
-- `broker-adapters` isolates venue-specific protocols and credentials.
+- `broker-adapters` defines explicit adapter identity/environment metadata, deterministic registration,
+  durable-idempotency and sanitized-audit contracts, and normalized failure/retry safety for future
+  venue integrations. It extends execution-engine contracts without owning execution lifecycle state
+  and contains no concrete venue or credential-resolution implementation.
 - `shared` contains genuinely cross-cutting primitives only; it must not become a miscellaneous domain package.
 
 Dependencies flow from applications and adapters toward stable domain contracts. Domain packages must not import application or UI code. Broker-specific types must not leak into trading rules. Cross-package cycles are prohibited.
