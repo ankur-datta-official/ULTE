@@ -31,6 +31,7 @@
 - Execution policy creates deterministic attempts and idempotent broker-neutral entry, protection, fill, and cancellation lifecycles from ready plans; protection can cover only confirmed fills and requires adapter-declared non-reversing exit safety.
 - Broker-adapter infrastructure requires explicit execution environments, opaque credential references, durable atomic idempotency claims, deterministic request fingerprints, conservative unknown-outcome reconciliation, and sanitized audit contracts before concrete integrations are added.
 - Durable execution orchestration claims before submission, persists a may-have-started marker before adapter I/O, blocks ambiguous restart states pending reconciliation, and permits retry only with the same key and fingerprint after definite non-submission.
+- PostgreSQL execution persistence provides environment-bound atomic idempotency claims, immutable and monotonic durable outcomes, and append-only sanitized broker audits without owning connections or broker APIs.
 
 ## Not yet specified
 

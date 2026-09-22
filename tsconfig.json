@@ -16,6 +16,7 @@
     { "path": "./packages/execution-preparation-engine" },
     { "path": "./packages/execution-engine" },
     { "path": "./packages/broker-adapters" },
-    { "path": "./packages/execution-reconciliation-engine" }
+    { "path": "./packages/execution-reconciliation-engine" },
+    { "path": "./packages/execution-store-postgres" }
   ]
 }

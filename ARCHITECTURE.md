@@ -47,6 +47,9 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   conservative may-have-started marker before every adapter call, suppresses duplicate/conflicting
   submissions, and coordinates broker-neutral reconciliation and explicit same-key retry authorization.
   It contains neither persistence nor a concrete broker integration.
+- `execution-store-postgres` implements those idempotency and sanitized audit contracts with
+  environment-bound PostgreSQL uniqueness, insert-first atomic claims, immutable identity, and
+  caller-timed monotonic updates. It owns neither database connections nor broker integration.
 - `shared` contains genuinely cross-cutting primitives only; it must not become a miscellaneous domain package.
 
 Dependencies flow from applications and adapters toward stable domain contracts. Domain packages must not import application or UI code. Broker-specific types must not leak into trading rules. Cross-package cycles are prohibited.
