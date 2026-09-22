@@ -1,5 +1,10 @@
 import { unixMs, type UnixMs } from "@ulte/instrument-model";
-import { brokerAdapterId, type BrokerAdapterId } from "./identity.js";
+import {
+  brokerAdapterId,
+  isExecutionEnvironment,
+  type BrokerAdapterId,
+  type ExecutionEnvironment,
+} from "./identity.js";
 import type { RequestFingerprint } from "./fingerprints.js";
 
 export const IDEMPOTENCY_OPERATIONS = [
@@ -15,12 +20,15 @@ export const IDEMPOTENCY_RECORD_STATUSES = [
   "CONFIRMED",
   "REJECTED",
   "OUTCOME_UNKNOWN",
+  "RETRY_AUTHORIZED",
+  "FAILED_NOT_SUBMITTED",
 ] as const;
 export type IdempotencyRecordStatus = (typeof IDEMPOTENCY_RECORD_STATUSES)[number];
 
 export interface IdempotencyRecord {
   readonly idempotencyKey: string;
   readonly adapterId: BrokerAdapterId;
+  readonly environment: ExecutionEnvironment;
   readonly executionAttemptId: string;
   readonly operation: IdempotencyOperation;
   readonly requestFingerprint: RequestFingerprint;
@@ -40,6 +48,7 @@ export interface IdempotencyRecordInput extends Omit<IdempotencyRecord,
 export interface IdempotencyClaimInput {
   readonly idempotencyKey: string;
   readonly adapterId: BrokerAdapterId;
+  readonly environment: ExecutionEnvironment;
   readonly executionAttemptId: string;
   readonly operation: IdempotencyOperation;
   readonly requestFingerprint: RequestFingerprint;
@@ -57,6 +66,8 @@ export type IdempotencyClaimResult =
 
 export interface IdempotencyOutcomeInput {
   readonly adapterId: BrokerAdapterId;
+  /** Must equal the environment established by the original atomic claim. */
+  readonly environment: ExecutionEnvironment;
   readonly idempotencyKey: string;
   readonly requestFingerprint: RequestFingerprint;
   readonly status: Exclude<IdempotencyRecordStatus, "CLAIMED">;
@@ -71,11 +82,12 @@ export type IdempotencyClaimComparison =
 
 /**
  * Persistence contract only. claim MUST atomically create-or-read and must never overwrite a
- * record whose key is paired with a different request fingerprint.
+ * record whose key is paired with a different environment or request fingerprint.
  */
 export interface IdempotencyRepository {
   claim(input: IdempotencyClaimInput): Promise<IdempotencyClaimResult>;
   read(adapterId: BrokerAdapterId, idempotencyKey: string): Promise<IdempotencyRecord | undefined>;
+  /** MUST reject an update whose environment differs from the originally claimed record. */
   recordOutcome(input: IdempotencyOutcomeInput): Promise<IdempotencyRecord>;
 }
 
@@ -87,6 +99,9 @@ function identifier(value: unknown, field: string): string {
 }
 
 export function createIdempotencyRecord(input: IdempotencyRecordInput): IdempotencyRecord {
+  if (!isExecutionEnvironment(input.environment)) {
+    throw new TypeError("Invalid idempotency environment");
+  }
   if (!(IDEMPOTENCY_OPERATIONS as readonly string[]).includes(input.operation)) {
     throw new TypeError("Invalid idempotency operation");
   }
@@ -99,6 +114,7 @@ export function createIdempotencyRecord(input: IdempotencyRecordInput): Idempote
   return Object.freeze({
     idempotencyKey: identifier(input.idempotencyKey, "idempotencyKey"),
     adapterId: brokerAdapterId(input.adapterId),
+    environment: input.environment,
     executionAttemptId: identifier(input.executionAttemptId, "executionAttemptId"),
     operation: input.operation,
     requestFingerprint: identifier(input.requestFingerprint, "requestFingerprint") as RequestFingerprint,
@@ -114,11 +130,15 @@ export function createIdempotencyRecord(input: IdempotencyRecordInput): Idempote
 /** Pure model of the comparison an atomic repository claim must perform. */
 export function compareIdempotencyClaim(
   existing: IdempotencyRecord | undefined,
-  requested: Pick<IdempotencyClaimInput, "adapterId" | "idempotencyKey" | "requestFingerprint">,
+  requested: Pick<
+    IdempotencyClaimInput,
+    "adapterId" | "environment" | "idempotencyKey" | "requestFingerprint"
+  >,
 ): IdempotencyClaimComparison {
   if (existing === undefined) return Object.freeze({ status: "CLAIMED_NEW" });
   if (
     existing.adapterId === requested.adapterId
+    && existing.environment === requested.environment
     && existing.idempotencyKey === requested.idempotencyKey
     && existing.requestFingerprint === requested.requestFingerprint
   ) return Object.freeze({ status: "EXISTING_SAME_REQUEST" });

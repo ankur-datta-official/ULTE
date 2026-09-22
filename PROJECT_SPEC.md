@@ -30,6 +30,7 @@
 - Execution preparation validates freshness, current-market validity, and exact venue-neutral price/quantity representability before producing a deterministic broker-neutral plan; it does not round, submit, or authorize an order.
 - Execution policy creates deterministic attempts and idempotent broker-neutral entry, protection, fill, and cancellation lifecycles from ready plans; protection can cover only confirmed fills and requires adapter-declared non-reversing exit safety.
 - Broker-adapter infrastructure requires explicit execution environments, opaque credential references, durable atomic idempotency claims, deterministic request fingerprints, conservative unknown-outcome reconciliation, and sanitized audit contracts before concrete integrations are added.
+- Durable execution orchestration claims before submission, persists a may-have-started marker before adapter I/O, blocks ambiguous restart states pending reconciliation, and permits retry only with the same key and fingerprint after definite non-submission.
 
 ## Not yet specified
 
@@ -37,7 +38,7 @@
 - Supported asset classes, exchanges, brokers, symbols, markets, and jurisdictions.
 - Market-data vendors, required feeds, canonical data formats, and fallback policies.
 - Regime, structure, liquidity, setup, prediction, and validation algorithms.
-- Concrete venue order mappings, durable execution reconciliation, and failure recovery behavior.
+- Concrete venue order mappings and venue-specific reconciliation providers.
 - User roles, authentication, authorization, dashboard behavior, and extension UX.
 - Service-level objectives, deployment topology, retention periods, and operational budgets.
 - Regulatory, legal, compliance, and reporting requirements.

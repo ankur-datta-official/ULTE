@@ -14,7 +14,7 @@ The credential-profile reference is only a secure-infrastructure lookup referenc
 
 ## Durable idempotency and request fingerprints
 
-Execution-engine idempotency keys identify stable logical operations. A future repository implementation must durably protect those keys across retry, timeout, crash, duplicate delivery, and process restart. Its asynchronous `claim` operation must atomically create-or-read: the same adapter/key and fingerprint is `EXISTING_SAME_REQUEST`, while any different fingerprint is `CONFLICT / IDEMPOTENCY_CONFLICT` and must never overwrite the existing record or trigger submission. `read` and `recordOutcome` complete the persistence contract; this phase provides no storage.
+Execution-engine idempotency keys identify stable logical operations. A future repository implementation must durably protect those keys across retry, timeout, crash, duplicate delivery, and process restart. Its asynchronous `claim` operation must atomically create-or-read: the same adapter/environment/key and fingerprint is `EXISTING_SAME_REQUEST`, while any different environment or fingerprint is `CONFLICT / IDEMPOTENCY_CONFLICT` and must never overwrite the existing record or trigger submission. Outcome updates must preserve the environment established by the claim. `read` and `recordOutcome` complete the persistence contract; this phase provides no storage.
 
 Entry, protection, and cancellation fingerprints use versioned, fixed-order, length-prefixed encoding over every material public request field. They preserve authoritative decimal strings without numeric conversion and exclude credential references. If venue client idempotency is supported, a future integration may map the logical key to venue client identity. Otherwise it must use durable local idempotency plus reconciliation.
 
@@ -23,6 +23,11 @@ Entry, protection, and cancellation fingerprints use versioned, fixed-order, len
 Normalized failures separate broker-neutral category, outcome certainty, and submission exposure. Authentication, authorization, invalid request, insufficient funds, explicit order rejection, and idempotency conflict are never retryable. A definite transient rate-limit, network, timeout, or adapter-unavailable failure is retry-safe only when submission is known not to have occurred.
 
 `OUTCOME_UNKNOWN`, or any failure where submission may have occurred, is `REQUIRES_RECONCILIATION`. Losing an acknowledgement after possible submission must never produce a second independent logical order: the same idempotency key must be reconciled first. Classification is advisory; this package performs no retry or reconciliation.
+
+The durable status vocabulary also includes `RETRY_AUTHORIZED` and `FAILED_NOT_SUBMITTED` for the
+orchestration layer. The former records explicit same-key/same-fingerprint retry permission after
+definite non-submission; the latter records a terminal non-submission failure without falsely calling
+it a broker rejection. `SUBMITTED` means submission may have started and must be written before I/O.
 
 ## Audit contract
 

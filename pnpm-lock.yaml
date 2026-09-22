@@ -51,6 +51,18 @@ importers:
         specifier: workspace:*
         version: link:../trade-intent-engine
 
+  packages/execution-reconciliation-engine:
+    dependencies:
+      '@ulte/broker-adapters':
+        specifier: workspace:*
+        version: link:../broker-adapters
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+
   packages/instrument-model: {}
 
   packages/market-data:

@@ -43,6 +43,10 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   durable-idempotency and sanitized-audit contracts, and normalized failure/retry safety for future
   venue integrations. It extends execution-engine contracts without owning execution lifecycle state
   and contains no concrete venue or credential-resolution implementation.
+- `execution-reconciliation-engine` claims logical operations durably before submission, writes a
+  conservative may-have-started marker before every adapter call, suppresses duplicate/conflicting
+  submissions, and coordinates broker-neutral reconciliation and explicit same-key retry authorization.
+  It contains neither persistence nor a concrete broker integration.
 - `shared` contains genuinely cross-cutting primitives only; it must not become a miscellaneous domain package.
 
 Dependencies flow from applications and adapters toward stable domain contracts. Domain packages must not import application or UI code. Broker-specific types must not leak into trading rules. Cross-package cycles are prohibited.

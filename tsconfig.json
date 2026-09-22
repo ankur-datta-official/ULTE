@@ -15,6 +15,7 @@
     { "path": "./packages/trade-intent-engine" },
     { "path": "./packages/execution-preparation-engine" },
     { "path": "./packages/execution-engine" },
-    { "path": "./packages/broker-adapters" }
+    { "path": "./packages/broker-adapters" },
+    { "path": "./packages/execution-reconciliation-engine" }
   ]
 }

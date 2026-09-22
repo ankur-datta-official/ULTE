@@ -257,6 +257,7 @@ describe("durable idempotency model", () => {
   const existing = createIdempotencyRecord({
     idempotencyKey: "entry-key-1",
     adapterId,
+    environment: "SANDBOX",
     executionAttemptId: "attempt-1",
     operation: "ENTRY_SUBMISSION",
     requestFingerprint,
@@ -267,11 +268,24 @@ describe("durable idempotency model", () => {
 
   it("creates a frozen caller-timed record", () => {
     expect(existing.createdAt).toBe(unixMs(1_000));
+    expect(existing.environment).toBe("SANDBOX");
     expect(Object.isFrozen(existing)).toBe(true);
   });
 
+  it("rejects an invalid durable environment", () => {
+    expect(() => createIdempotencyRecord({
+      ...existing,
+      environment: "" as "SANDBOX",
+    })).toThrow("Invalid idempotency environment");
+  });
+
   it("classifies absent and identical claims deterministically", () => {
-    const claim = { adapterId, idempotencyKey: "entry-key-1", requestFingerprint };
+    const claim = {
+      adapterId,
+      environment: "SANDBOX" as const,
+      idempotencyKey: "entry-key-1",
+      requestFingerprint,
+    };
     expect(compareIdempotencyClaim(undefined, claim)).toEqual({ status: "CLAIMED_NEW" });
     expect(compareIdempotencyClaim(existing, claim)).toEqual({ status: "EXISTING_SAME_REQUEST" });
   });
@@ -281,8 +295,18 @@ describe("durable idempotency model", () => {
     expect(changed).not.toBe(requestFingerprint);
     expect(compareIdempotencyClaim(existing, {
       adapterId,
+      environment: "SANDBOX",
       idempotencyKey: "entry-key-1",
       requestFingerprint: changed,
+    })).toEqual({ status: "CONFLICT", reason: "IDEMPOTENCY_CONFLICT" });
+  });
+
+  it("classifies an otherwise identical cross-environment claim as a conflict", () => {
+    expect(compareIdempotencyClaim(existing, {
+      adapterId,
+      environment: "LIVE",
+      idempotencyKey: "entry-key-1",
+      requestFingerprint,
     })).toEqual({ status: "CONFLICT", reason: "IDEMPOTENCY_CONFLICT" });
   });
 });
