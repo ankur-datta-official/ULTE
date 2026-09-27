@@ -7,6 +7,7 @@
     { "path": "./packages/market-data" },
     { "path": "./packages/live-market-data-engine" },
     { "path": "./packages/realtime-analysis-engine" },
+    { "path": "./packages/realtime-decision-engine" },
     { "path": "./packages/backtest-engine" },
     { "path": "./packages/regime-engine" },
     { "path": "./packages/structure-engine" },

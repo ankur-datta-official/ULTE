@@ -28,6 +28,11 @@
   equivalent replay, creates bounded immutable multi-timeframe views at explicit candle-close as-of
   boundaries, and reuses the existing regime, structure/liquidity, and setup engines. Open/future
   candles and rejected live inputs cannot reach analysis, and risk/execution remain downstream.
+- Real-time decision orchestration consumes immutable analysis-cycle results, requires exact
+  same-as-of caller-supplied risk and capital context, and reuses structural risk, portfolio risk,
+  position sizing, and trade-intent engines in that fixed order. It fail-closes unsupported multiple
+  actionable candidates, preserves monotonic idempotent decision boundaries, and stops before
+  execution preparation.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

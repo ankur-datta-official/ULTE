@@ -1,0 +1,31 @@
+{
+  "name": "@ulte/realtime-decision-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ulte/instrument-model": "workspace:*",
+    "@ulte/portfolio-risk-engine": "workspace:*",
+    "@ulte/position-sizing-engine": "workspace:*",
+    "@ulte/realtime-analysis-engine": "workspace:*",
+    "@ulte/risk-engine": "workspace:*",
+    "@ulte/setup-engine": "workspace:*",
+    "@ulte/structure-engine": "workspace:*",
+    "@ulte/trade-intent-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@ulte/backtest-engine": "workspace:*",
+    "@ulte/live-market-data-engine": "workspace:*",
+    "@ulte/market-data": "workspace:*"
+  }
+}
