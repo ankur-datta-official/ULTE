@@ -48,11 +48,16 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   `TRADE_INTENT_CREATED` through the existing execution-preparation engine with caller-supplied quote,
   observation boundary, policy, and instrument constraints. It publishes deterministic monotonic
   no-op, rejected, or prepared outcomes and stops before policy, broker, persistence, or network code.
+- `realtime-execution-submission-engine` is the controlled first side-effect boundary. It accepts only
+  Task 020 prepared results, hard-blocks LIVE, enforces caller-timed plan freshness, reuses the adapter
+  registry and execution policy, and delegates entry-only submission to the existing durable
+  reconciliation-aware orchestrator. It owns no provider transport, fill, protection, cancellation,
+  reconciliation execution, or PostgreSQL implementation.
 - `trading-core` owns shared strategy contracts and deterministic trading semantics used by both live and backtest paths.
 - `regime-engine`, `structure-engine`, `setup-engine`, and `prediction-engine` provide focused analysis capabilities without UI dependencies.
 - `setup-engine` consumes public regime and structure evidence plus closed setup-timeframe candles; it emits setup candidates, not executable trade signals.
 - `risk-engine` deterministically qualifies structural risk and enforces the official net RR floor; `portfolio-risk-engine` separately decides whether requested monetary risk fits explicit account-level capital policy; `position-sizing-engine` converts that approved requested risk into a conservative step-aligned quantity using explicit instrument economics. `trade-intent-engine` verifies and combines those authoritative outputs into a deterministic handoff snapshot without recalculating them. None of these results is an execution instruction.
-- `execution-preparation-engine` converts a ready trade intent plus an explicit current quote and venue-neutral constraints into an exact, broker-neutral execution plan without submitting it. `realtime-execution-preparation-engine` orchestrates that boundary for live/replay decisions without duplicating its rules. `execution-engine` preserves that plan while coordinating immutable, idempotent entry, confirmed-fill protection, and cancellation lifecycles through capability-declared adapter contracts; it contains no venue implementation.
+- `execution-preparation-engine` converts a ready trade intent plus an explicit current quote and venue-neutral constraints into an exact, broker-neutral execution plan without submitting it. `realtime-execution-preparation-engine` orchestrates that boundary for live/replay decisions without duplicating its rules. `realtime-execution-submission-engine` controls entry submission through the existing durable workflow for DRY_RUN and SANDBOX only. `execution-engine` preserves that plan while coordinating immutable, idempotent entry, confirmed-fill protection, and cancellation lifecycles through capability-declared adapter contracts; it contains no venue implementation.
 - `broker-adapters` defines explicit adapter identity/environment metadata, deterministic registration,
   durable-idempotency and sanitized-audit contracts, and normalized failure/retry safety for future
   venue integrations. It extends execution-engine contracts without owning execution lifecycle state

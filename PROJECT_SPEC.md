@@ -38,6 +38,10 @@
   observation boundary and execution context, and preserves deterministic rejection/plan results.
   Bounded replay retention is backed by an independent monotonic decision-boundary watermark, and
   the orchestration stops before execution policy, broker, network, reconciliation, or persistence.
+- Controlled real-time execution submission accepts only prepared Task 020 results, permits DRY_RUN
+  and SANDBOX while hard-blocking LIVE, applies an explicit caller-timed prepared-plan freshness gate,
+  and reuses the existing adapter registry, execution policy, and durable entry-submission workflow.
+  It performs no fill, protection, cancellation, position, reconciliation, provider, or PostgreSQL work.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
