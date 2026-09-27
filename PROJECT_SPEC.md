@@ -42,6 +42,12 @@
   and SANDBOX while hard-blocking LIVE, applies an explicit caller-timed prepared-plan freshness gate,
   and reuses the existing adapter registry, execution policy, and durable entry-submission workflow.
   It performs no fill, protection, cancellation, position, reconciliation, provider, or PostgreSQL work.
+- Deterministic real-time fill orchestration accepts only confirmed Task 021 submissions with their
+  actual accepted acknowledgement, preserves acknowledgement as distinct from fill, validates
+  caller-supplied observation time and execution identity, and reuses the existing normalized fill
+  event and execution lifecycle transition for exact partial/full accumulation, overfill rejection,
+  and duplicate/conflict behavior. It performs no provider parsing, adapter call, persistence,
+  reconciliation, protection, cancellation, position, PnL, or LIVE-enablement work.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
