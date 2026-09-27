@@ -33,6 +33,11 @@
   position sizing, and trade-intent engines in that fixed order. It fail-closes unsupported multiple
   actionable candidates, preserves monotonic idempotent decision boundaries, and stops before
   execution preparation.
+- Real-time execution-preparation orchestration consumes immutable real-time decision results, sends
+  only ready trade intents to the existing execution-preparation engine with an explicit caller-owned
+  observation boundary and execution context, and preserves deterministic rejection/plan results.
+  Bounded replay retention is backed by an independent monotonic decision-boundary watermark, and
+  the orchestration stops before execution policy, broker, network, reconciliation, or persistence.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

@@ -176,6 +176,46 @@ importers:
         specifier: workspace:*
         version: link:../market-data
 
+  packages/realtime-execution-preparation-engine:
+    dependencies:
+      '@ulte/execution-preparation-engine':
+        specifier: workspace:*
+        version: link:../execution-preparation-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/realtime-decision-engine':
+        specifier: workspace:*
+        version: link:../realtime-decision-engine
+    devDependencies:
+      '@ulte/backtest-engine':
+        specifier: workspace:*
+        version: link:../backtest-engine
+      '@ulte/live-market-data-engine':
+        specifier: workspace:*
+        version: link:../live-market-data-engine
+      '@ulte/market-data':
+        specifier: workspace:*
+        version: link:../market-data
+      '@ulte/portfolio-risk-engine':
+        specifier: workspace:*
+        version: link:../portfolio-risk-engine
+      '@ulte/position-sizing-engine':
+        specifier: workspace:*
+        version: link:../position-sizing-engine
+      '@ulte/realtime-analysis-engine':
+        specifier: workspace:*
+        version: link:../realtime-analysis-engine
+      '@ulte/risk-engine':
+        specifier: workspace:*
+        version: link:../risk-engine
+      '@ulte/setup-engine':
+        specifier: workspace:*
+        version: link:../setup-engine
+      '@ulte/trade-intent-engine':
+        specifier: workspace:*
+        version: link:../trade-intent-engine
+
   packages/regime-engine:
     dependencies:
       '@ulte/instrument-model':
