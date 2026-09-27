@@ -9,7 +9,7 @@ import type {
   ExecutionSide,
 } from "@ulte/execution-preparation-engine";
 
-export const EXECUTION_ATTEMPT_SCHEMA_VERSION = "EXECUTION_ATTEMPT_V1" as const;
+export const EXECUTION_ATTEMPT_SCHEMA_VERSION = "EXECUTION_ATTEMPT_V2" as const;
 
 export type ExecutionState =
   | "READY_FOR_ENTRY_SUBMISSION"
@@ -19,6 +19,8 @@ export type ExecutionState =
   | "ENTRY_FILLED"
   | "PROTECTION_PENDING"
   | "PROTECTED"
+  | "EXIT_PARTIALLY_FILLED"
+  | "EXIT_FILLED"
   | "CANCEL_PENDING"
   | "CANCELED"
   | "ENTRY_CANCELED_WITH_EXPOSURE"
@@ -34,6 +36,8 @@ export type EntryOrderStatus =
   | "REJECTED";
 
 export type ProtectionMode = "NATIVE_BRACKET" | "MANAGED_PROTECTION";
+
+export type ExitLeg = "PROTECTIVE_STOP" | "PROFIT_TARGET";
 
 export interface AdapterCapabilitiesInput {
   readonly supportsClientIdempotency: boolean;
@@ -117,6 +121,23 @@ export interface FillEvent extends Omit<FillEventInput, "filledQuantity" | "fill
   readonly filledAt: UnixMs;
 }
 
+export interface ExitFillEventInput {
+  readonly executionAttemptId: string;
+  readonly protectionRequestId: string;
+  readonly exitSide: ExecutionSide;
+  readonly exitLeg: ExitLeg;
+  readonly fillId: string;
+  readonly filledQuantity: string;
+  readonly fillPrice: string;
+  readonly filledAt: number;
+}
+export interface ExitFillEvent extends Omit<ExitFillEventInput, "filledQuantity" | "fillPrice" | "filledAt"> {
+  readonly kind: "EXIT_FILL";
+  readonly filledQuantity: PositiveDecimalString;
+  readonly fillPrice: PositiveDecimalString;
+  readonly filledAt: UnixMs;
+}
+
 export interface ProtectionAcknowledgementInput {
   readonly executionAttemptId: string;
   readonly protectionRequestId: string;
@@ -128,6 +149,12 @@ export interface ProtectionAcknowledgement extends Omit<ProtectionAcknowledgemen
   readonly kind: "PROTECTION_ACCEPTED";
   readonly protectedQuantity: PositiveDecimalString;
   readonly acknowledgedAt: UnixMs;
+}
+
+export interface AcknowledgedProtection {
+  readonly kind: "ACKNOWLEDGED_PROTECTION";
+  readonly request: ProtectionRequest;
+  readonly acknowledgement: ProtectionAcknowledgement;
 }
 
 export interface ProtectionRejectionInput {
@@ -194,9 +221,12 @@ export interface ExecutionAttempt {
   readonly adapterOrderId?: string;
   readonly filledEntryQuantity: NonNegativeDecimalString;
   readonly protectedQuantity: NonNegativeDecimalString;
+  readonly exitedQuantity: NonNegativeDecimalString;
   readonly unprotectedFilledQuantity: NonNegativeDecimalString;
   readonly lastFillPrice?: PositiveDecimalString;
   readonly processedFills: readonly FillEvent[];
+  readonly processedExitFills: readonly ExitFillEvent[];
+  readonly acknowledgedProtections: readonly AcknowledgedProtection[];
   readonly pendingProtectionRequest?: ProtectionRequest;
   readonly pendingCancellationRequest?: EntryCancellationRequest;
   readonly lastExecutionEventAt?: UnixMs;
@@ -246,6 +276,11 @@ export type ExecutionRejectionReason =
   | "OUT_OF_ORDER_EXECUTION_EVENT"
   | "OVERFILL_DETECTED"
   | "DUPLICATE_FILL_CONFLICT"
+  | "EXIT_SIDE_MISMATCH"
+  | "EXIT_PROTECTION_REQUEST_NOT_ACKNOWLEDGED"
+  | "EXIT_COVERAGE_EXCEEDED"
+  | "OVER_EXIT_DETECTED"
+  | "DUPLICATE_EXIT_FILL_CONFLICT"
   | "NO_UNPROTECTED_FILLED_QUANTITY"
   | "PROTECTED_QUANTITY_EXCEEDS_FILLED";
 

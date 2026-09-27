@@ -13,6 +13,8 @@ import type {
   EntryAcknowledgementInput,
   EntryRejection,
   EntryRejectionInput,
+  ExitFillEvent,
+  ExitFillEventInput,
   FillEvent,
   FillEventInput,
   ProtectionAcknowledgement,
@@ -73,6 +75,26 @@ export function createFillEvent(input: FillEventInput): FillEvent {
     kind: "FILL",
     executionAttemptId: identifier(input.executionAttemptId, "executionAttemptId"),
     adapterOrderId: identifier(input.adapterOrderId, "adapterOrderId"),
+    fillId: identifier(input.fillId, "fillId"),
+    filledQuantity: positiveDecimalString(input.filledQuantity),
+    fillPrice: positiveDecimalString(input.fillPrice),
+    filledAt: unixMs(input.filledAt),
+  });
+}
+
+export function createExitFillEvent(input: ExitFillEventInput): ExitFillEvent {
+  if (input.exitSide !== "BUY" && input.exitSide !== "SELL") {
+    throw new TypeError("exitSide must be BUY or SELL");
+  }
+  if (input.exitLeg !== "PROTECTIVE_STOP" && input.exitLeg !== "PROFIT_TARGET") {
+    throw new TypeError("exitLeg must identify a supported protection leg");
+  }
+  return Object.freeze({
+    kind: "EXIT_FILL",
+    executionAttemptId: identifier(input.executionAttemptId, "executionAttemptId"),
+    protectionRequestId: identifier(input.protectionRequestId, "protectionRequestId"),
+    exitSide: input.exitSide,
+    exitLeg: input.exitLeg,
     fillId: identifier(input.fillId, "fillId"),
     filledQuantity: positiveDecimalString(input.filledQuantity),
     fillPrice: positiveDecimalString(input.fillPrice),

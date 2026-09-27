@@ -162,7 +162,10 @@ describe("Task 021 gating and acknowledgement separation", () => {
         state: "ENTRY_WORKING",
         entryOrderStatus: "WORKING",
         filledEntryQuantity: "0",
+        exitedQuantity: "0",
         processedFills: [],
+        processedExitFills: [],
+        acknowledgedProtections: [],
       },
     });
   });

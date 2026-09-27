@@ -2,7 +2,9 @@ import { fingerprintProtectionRequest } from "@ulte/broker-adapters";
 import {
   acknowledgeProtection,
   type AdapterCapabilities,
+  type AcknowledgedProtection,
   type ExecutionAttempt,
+  type ExitFillEvent,
   type ProtectionAcknowledgement,
   type ProtectionRequest,
   type TransitionRejectedResult,
@@ -106,6 +108,45 @@ function sameFillHistory(left: ExecutionAttempt, right: ExecutionAttempt): boole
   });
 }
 
+function sameExitFill(left: ExitFillEvent, right: ExitFillEvent): boolean {
+  return left.kind === right.kind
+    && left.executionAttemptId === right.executionAttemptId
+    && left.protectionRequestId === right.protectionRequestId
+    && left.exitSide === right.exitSide
+    && left.exitLeg === right.exitLeg
+    && left.fillId === right.fillId
+    && left.filledQuantity === right.filledQuantity
+    && left.fillPrice === right.fillPrice
+    && left.filledAt === right.filledAt;
+}
+
+function sameExitFillHistory(left: ExecutionAttempt, right: ExecutionAttempt): boolean {
+  return left.processedExitFills.length === right.processedExitFills.length
+    && left.processedExitFills.every((fill, index) => {
+      const other = right.processedExitFills[index];
+      return other !== undefined && sameExitFill(fill, other);
+    });
+}
+
+function sameAcknowledgedProtection(left: AcknowledgedProtection, right: AcknowledgedProtection): boolean {
+  return left.kind === right.kind
+    && sameProtectionRequest(left.request, right.request)
+    && left.acknowledgement.kind === right.acknowledgement.kind
+    && left.acknowledgement.executionAttemptId === right.acknowledgement.executionAttemptId
+    && left.acknowledgement.protectionRequestId === right.acknowledgement.protectionRequestId
+    && left.acknowledgement.idempotencyKey === right.acknowledgement.idempotencyKey
+    && left.acknowledgement.protectedQuantity === right.acknowledgement.protectedQuantity
+    && left.acknowledgement.acknowledgedAt === right.acknowledgement.acknowledgedAt;
+}
+
+function sameAcknowledgedProtectionHistory(left: ExecutionAttempt, right: ExecutionAttempt): boolean {
+  return left.acknowledgedProtections.length === right.acknowledgedProtections.length
+    && left.acknowledgedProtections.every((record, index) => {
+      const other = right.acknowledgedProtections[index];
+      return other !== undefined && sameAcknowledgedProtection(record, other);
+    });
+}
+
 function sameCurrentAttempt(source: ExecutionAttempt, current: ExecutionAttempt): boolean {
   return current.status === source.status
     && current.schemaVersion === source.schemaVersion
@@ -133,9 +174,12 @@ function sameCurrentAttempt(source: ExecutionAttempt, current: ExecutionAttempt)
     && current.adapterOrderId === source.adapterOrderId
     && current.filledEntryQuantity === source.filledEntryQuantity
     && current.protectedQuantity === source.protectedQuantity
+    && current.exitedQuantity === source.exitedQuantity
     && current.unprotectedFilledQuantity === source.unprotectedFilledQuantity
     && current.lastFillPrice === source.lastFillPrice
     && sameFillHistory(current, source)
+    && sameExitFillHistory(current, source)
+    && sameAcknowledgedProtectionHistory(current, source)
     && sameProtectionRequest(current.pendingProtectionRequest, source.pendingProtectionRequest)
     && current.pendingCancellationRequest === source.pendingCancellationRequest
     && current.lastExecutionEventAt === source.lastExecutionEventAt

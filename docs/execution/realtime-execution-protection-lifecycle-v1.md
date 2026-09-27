@@ -22,7 +22,8 @@ Before projection, the engine requires the Task 023 execution attempt, policy re
 on the identities they expose. This includes execution-attempt ID, protection-request ID,
 idempotency key, instrument, protection mode, and exact policy request. A separately supplied current
 attempt must be the same immutable pending lifecycle snapshot, including static execution identity,
-fill history, protection request, quantities, state, and last event time. Unrelated durable records or
+entry/exit fill histories, acknowledged-protection provenance, protection request, quantities, state,
+and last event time. Unrelated durable records or
 substituted attempts fail closed without lifecycle mutation.
 
 The package delegates the acknowledgement to the existing execution-engine
@@ -44,13 +45,13 @@ read. The acknowledgement may equal but cannot exceed the observation boundary. 
 precede Task 023's `protectionAsOf`. The existing transition separately rejects an acknowledgement
 older than the attempt's last accepted execution event. Events are never sorted.
 
-The current execution model does not retain a protection-acknowledgement event ledger. Therefore it
-defines no special protection acknowledgement duplicate/conflict status. Replaying the same
-confirmed input from the same pending snapshot deterministically produces the same protected
-snapshot without process-local deduplication. Applying it to an already-updated snapshot is rejected
-as a current-attempt mismatch, and a changed quantity is rejected by `acknowledgeProtection`; neither
-path increments coverage or mutates its input. Task 024 claims deterministic replay-safe projection,
-not durable ingestion or exactly-once processing.
+The Task 025A execution model appends immutable acknowledged-protection provenance when this
+transition succeeds. It still defines no special protection acknowledgement duplicate/conflict
+status: replaying the same confirmed input from the same pending snapshot deterministically produces
+the same protected snapshot and provenance without process-local deduplication. Applying it to an
+already-updated snapshot is rejected as a current-attempt mismatch, and a changed quantity is
+rejected by `acknowledgeProtection`; neither path increments coverage or mutates its input. Task 024
+claims deterministic replay-safe projection, not durable ingestion or exactly-once processing.
 
 All public results and resulting attempts are frozen. Rejection is atomic: the Task 023 result,
 request, acknowledgement, current attempt, and fill history remain unchanged.

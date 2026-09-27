@@ -16,6 +16,7 @@ import {
   createCancellationRejection,
   createEntryAcknowledgement,
   createEntryRejection,
+  createExitFillEvent,
   createFillEvent,
   createProtectionAcknowledgement,
   createProtectionRejection,
@@ -34,6 +35,8 @@ import {
   type EntryRejectionInput,
   type EntrySubmissionRequest,
   type EntrySubmissionTransitionResult,
+  type ExitFillEvent,
+  type ExitFillEventInput,
   type ExecutionAttempt,
   type ExecutionAttemptCreationResult,
   type ExecutionRejectionReason,
@@ -134,6 +137,12 @@ function deriveState(attempt: Omit<ExecutionAttempt, "state" | "unprotectedFille
   if (attempt.entryOrderStatus === "REJECTED") return "REJECTED";
   if (attempt.pendingCancellationRequest !== undefined) return "CANCEL_PENDING";
   if (attempt.pendingProtectionRequest !== undefined) return "PROTECTION_PENDING";
+  if (compareDecimal(attempt.exitedQuantity, ZERO) > 0) {
+    const entryCannotIncrease = attempt.entryOrderStatus === "FILLED" || attempt.entryOrderStatus === "CANCELED";
+    return entryCannotIncrease && compareDecimal(attempt.exitedQuantity, attempt.filledEntryQuantity) === 0
+      ? "EXIT_FILLED"
+      : "EXIT_PARTIALLY_FILLED";
+  }
   if (attempt.entryOrderStatus === "CANCELED") {
     return compareDecimal(attempt.filledEntryQuantity, ZERO) === 0
       ? "CANCELED"
@@ -160,6 +169,8 @@ function evolve(
   const draft = { ...attempt, ...updates } as MutableAttempt;
   for (const key of remove) Reflect.deleteProperty(draft, key);
   draft.processedFills = Object.freeze([...draft.processedFills]);
+  draft.processedExitFills = Object.freeze([...draft.processedExitFills]);
+  draft.acknowledgedProtections = Object.freeze([...draft.acknowledgedProtections]);
   draft.unprotectedFilledQuantity = subtractNonNegative(draft.filledEntryQuantity, draft.protectedQuantity);
   draft.state = deriveState(draft);
   return Object.freeze(draft);
@@ -233,8 +244,11 @@ export function createExecutionAttempt(plan: ExecutionPreparationResult): Execut
     submissionIdempotencyKey: createOperationKey(executionAttemptId, "ENTRY_SUBMISSION"),
     filledEntryQuantity: ZERO,
     protectedQuantity: ZERO,
+    exitedQuantity: ZERO,
     unprotectedFilledQuantity: ZERO,
     processedFills: Object.freeze([]),
+    processedExitFills: Object.freeze([]),
+    acknowledgedProtections: Object.freeze([]),
   });
   return attempt;
 }
@@ -316,6 +330,17 @@ function sameFill(left: FillEvent, right: FillEvent): boolean {
     && left.filledAt === right.filledAt;
 }
 
+function sameExitFill(left: ExitFillEvent, right: ExitFillEvent): boolean {
+  return left.executionAttemptId === right.executionAttemptId
+    && left.protectionRequestId === right.protectionRequestId
+    && left.exitSide === right.exitSide
+    && left.exitLeg === right.exitLeg
+    && left.fillId === right.fillId
+    && compareDecimal(left.filledQuantity, right.filledQuantity) === 0
+    && compareDecimal(left.fillPrice, right.fillPrice) === 0
+    && left.filledAt === right.filledAt;
+}
+
 export function applyEntryFill(attempt: ExecutionAttempt, input: FillEventInput): ExecutionUpdateResult {
   let event;
   try { event = createFillEvent(input); } catch { return rejected(attempt, "INVALID_EVENT", true); }
@@ -336,6 +361,37 @@ export function applyEntryFill(attempt: ExecutionAttempt, input: FillEventInput)
     filledEntryQuantity: cumulative,
     lastFillPrice: event.fillPrice,
     processedFills: Object.freeze([...attempt.processedFills, event]),
+    lastExecutionEventAt: event.filledAt,
+  }));
+}
+
+export function applyExitFill(attempt: ExecutionAttempt, input: ExitFillEventInput): ExecutionUpdateResult {
+  let event;
+  try { event = createExitFillEvent(input); } catch { return rejected(attempt, "INVALID_EVENT", true); }
+  if (event.executionAttemptId !== attempt.executionAttemptId) return rejected(attempt, "EVENT_ATTEMPT_MISMATCH");
+  const prior = attempt.processedExitFills.find((fill) => fill.fillId === event.fillId);
+  if (prior !== undefined) {
+    return sameExitFill(prior, event)
+      ? updated(attempt, true)
+      : rejected(attempt, "DUPLICATE_EXIT_FILL_CONFLICT", true);
+  }
+  if (event.exitSide !== attempt.exitSide) return rejected(attempt, "EXIT_SIDE_MISMATCH");
+  const provenance = attempt.acknowledgedProtections.find(
+    ({ request }) => request.protectionRequestId === event.protectionRequestId,
+  );
+  if (provenance === undefined) return rejected(attempt, "EXIT_PROTECTION_REQUEST_NOT_ACKNOWLEDGED");
+  if (!eventTimeAccepted(attempt, event.filledAt)) return rejected(attempt, "OUT_OF_ORDER_EXECUTION_EVENT");
+  const cumulative = addNonNegative(attempt.exitedQuantity, event.filledQuantity);
+  if (
+    compareDecimal(cumulative, attempt.protectedQuantity) > 0
+    || compareDecimal(cumulative, attempt.filledEntryQuantity) > 0
+  ) return rejected(attempt, "OVER_EXIT_DETECTED", true);
+  if (compareDecimal(cumulative, provenance.request.targetCumulativeProtectedQuantity) > 0) {
+    return rejected(attempt, "EXIT_COVERAGE_EXCEEDED", true);
+  }
+  return updated(evolve(attempt, {
+    exitedQuantity: cumulative,
+    processedExitFills: Object.freeze([...attempt.processedExitFills, event]),
     lastExecutionEventAt: event.filledAt,
   }));
 }
@@ -410,8 +466,14 @@ export function acknowledgeProtection(
     return rejected(attempt, "PROTECTED_QUANTITY_EXCEEDS_FILLED", true);
   }
   if (!eventTimeAccepted(attempt, event.acknowledgedAt)) return rejected(attempt, "OUT_OF_ORDER_EXECUTION_EVENT");
+  const provenance = Object.freeze({
+    kind: "ACKNOWLEDGED_PROTECTION" as const,
+    request: pending,
+    acknowledgement: event,
+  });
   return updated(evolve(attempt, {
     protectedQuantity: event.protectedQuantity,
+    acknowledgedProtections: Object.freeze([...attempt.acknowledgedProtections, provenance]),
     lastExecutionEventAt: event.acknowledgedAt,
   }, ["pendingProtectionRequest"]));
 }

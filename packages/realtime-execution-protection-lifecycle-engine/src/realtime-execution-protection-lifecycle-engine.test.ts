@@ -11,6 +11,7 @@ import {
   createAdapterCapabilities,
   createEntryAcknowledgement,
   createExecutionAttempt,
+  createExitFillEvent,
   createFillEvent,
   createProtectionAcknowledgement,
   requestEntrySubmission,
@@ -214,6 +215,42 @@ describe("Task 024 outer status gating", () => {
       upstreamStatus: status,
     });
     expect(Object.isFrozen(output)).toBe(true);
+  });
+
+  it("rejects substituted exit history and acknowledged-protection provenance", () => {
+    const source = confirmed();
+    const request = source.protectionRequest;
+    const exitFill = createExitFillEvent({
+      executionAttemptId: source.executionAttempt.executionAttemptId,
+      protectionRequestId: request.protectionRequestId,
+      exitSide: source.executionAttempt.exitSide,
+      exitLeg: "PROTECTIVE_STOP",
+      fillId: "substituted-exit",
+      filledQuantity: "1",
+      fillPrice: "90",
+      filledAt: 1_350,
+    });
+    const acknowledgement = createProtectionAcknowledgement({
+      executionAttemptId: request.executionAttemptId,
+      protectionRequestId: request.protectionRequestId,
+      idempotencyKey: request.idempotencyKey,
+      protectedQuantity: request.targetCumulativeProtectedQuantity,
+      acknowledgedAt: 1_350,
+    });
+    const changedExitHistory = Object.freeze({
+      ...source.executionAttempt,
+      processedExitFills: Object.freeze([exitFill]),
+    }) as ExecutionAttempt;
+    const changedProvenance = Object.freeze({
+      ...source.executionAttempt,
+      acknowledgedProtections: Object.freeze([Object.freeze({
+        kind: "ACKNOWLEDGED_PROTECTION" as const,
+        request,
+        acknowledgement,
+      })]),
+    }) as ExecutionAttempt;
+    expect(apply(source, changedExitHistory)).toMatchObject({ reason: "CURRENT_ATTEMPT_MISMATCH" });
+    expect(apply(source, changedProvenance)).toMatchObject({ reason: "CURRENT_ATTEMPT_MISMATCH" });
   });
 
   it("does not trust a pending-looking attempt under a blocked outer status", () => {

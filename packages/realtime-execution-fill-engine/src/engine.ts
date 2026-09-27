@@ -75,7 +75,11 @@ function hasCoherentSubmissionIdentity(
   const durable = submission.durableResult;
   return attempt.entryOrderStatus === "SUBMISSION_PENDING"
     && attempt.processedFills.length === 0
+    && attempt.processedExitFills.length === 0
+    && attempt.acknowledgedProtections.length === 0
     && attempt.filledEntryQuantity === "0"
+    && attempt.protectedQuantity === "0"
+    && attempt.exitedQuantity === "0"
     && acknowledgement.executionAttemptId === attempt.executionAttemptId
     && acknowledgement.idempotencyKey === attempt.submissionIdempotencyKey
     && durable.idempotencyKey === attempt.submissionIdempotencyKey
@@ -90,6 +94,7 @@ function hasSameExecutionIdentity(
   acknowledgement: EntryAcknowledgement,
 ): boolean {
   return current.executionAttemptId === source.executionAttemptId
+    && current.schemaVersion === source.schemaVersion
     && current.executionPlanId === source.executionPlanId
     && current.tradeIntentId === source.tradeIntentId
     && current.candidateId === source.candidateId

@@ -60,6 +60,12 @@
   immutable protection acknowledgement transition for exact partial, full, and incremental coverage.
   It performs no adapter, repository, reconciliation, exit-fill, position-close, PnL, provider, or
   database work, and protection acceptance alone never implies that an exit occurred.
+- Authoritative exit execution domain V1 keeps entry `FillEvent` and exit `ExitFillEvent` structurally
+  distinct, requires an explicit stop/target leg and acknowledged protection-request provenance,
+  and applies immutable exact-decimal partial/full exit transitions with separate deduplication,
+  chronology, per-request coverage ceilings, and over-exit rejection. A full exit is terminal only
+  after entry can no longer add exposure; no position, PnL, broker, persistence, or real-time exit
+  projection behavior is included.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
