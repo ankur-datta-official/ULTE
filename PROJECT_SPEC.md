@@ -54,6 +54,12 @@
   reconciliation-aware protection submission. It never recalculates stop, target, side, quantity, or
   identity and performs no entry/cancellation/modification, exit-fill, position/PnL, reconciliation,
   provider, or PostgreSQL work.
+- Deterministic real-time protection lifecycle projection accepts only Task 023
+  `PROTECTION_CONFIRMED` results carrying their actual normalized acknowledgement, validates
+  attempt/request/durable identity and caller-supplied observation chronology, and reuses the existing
+  immutable protection acknowledgement transition for exact partial, full, and incremental coverage.
+  It performs no adapter, repository, reconciliation, exit-fill, position-close, PnL, provider, or
+  database work, and protection acceptance alone never implies that an exit occurred.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
