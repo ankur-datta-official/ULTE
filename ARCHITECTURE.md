@@ -37,6 +37,9 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   explicit source/stream/epoch identity, bounded deduplication, chronology and no-lookahead rules,
   and routes only accepted events into the shared `market-data` multi-timeframe candle engine.
 - `backtest-engine` owns deterministic historical replay and reuses `market-data` candle processing.
+- `realtime-analysis-engine` consumes only finalized candle events from accepted live ingestion or
+  equivalent historical replay, builds bounded synchronized as-of frames, and reuses the regime,
+  structure/liquidity, and setup engines without invoking risk or execution.
 - `trading-core` owns shared strategy contracts and deterministic trading semantics used by both live and backtest paths.
 - `regime-engine`, `structure-engine`, `setup-engine`, and `prediction-engine` provide focused analysis capabilities without UI dependencies.
 - `setup-engine` consumes public regime and structure evidence plus closed setup-timeframe candles; it emits setup candidates, not executable trade signals.

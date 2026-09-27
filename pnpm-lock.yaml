@@ -114,6 +114,31 @@ importers:
         specifier: workspace:*
         version: link:../risk-engine
 
+  packages/realtime-analysis-engine:
+    dependencies:
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/live-market-data-engine':
+        specifier: workspace:*
+        version: link:../live-market-data-engine
+      '@ulte/market-data':
+        specifier: workspace:*
+        version: link:../market-data
+      '@ulte/regime-engine':
+        specifier: workspace:*
+        version: link:../regime-engine
+      '@ulte/setup-engine':
+        specifier: workspace:*
+        version: link:../setup-engine
+      '@ulte/structure-engine':
+        specifier: workspace:*
+        version: link:../structure-engine
+    devDependencies:
+      '@ulte/backtest-engine':
+        specifier: workspace:*
+        version: link:../backtest-engine
+
   packages/regime-engine:
     dependencies:
       '@ulte/instrument-model':

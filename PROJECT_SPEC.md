@@ -24,6 +24,10 @@
   identity; caller-supplied observation boundaries; bounded deterministic deduplication; explicit
   chronology/gap results; and the same candle implementation as historical replay. It contains no
   concrete feed transport or provider integration.
+- Real-time analysis orchestration consumes only finalized candles from accepted live ingestion or
+  equivalent replay, creates bounded immutable multi-timeframe views at explicit candle-close as-of
+  boundaries, and reuses the existing regime, structure/liquidity, and setup engines. Open/future
+  candles and rejected live inputs cannot reach analysis, and risk/execution remain downstream.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
