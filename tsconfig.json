@@ -11,6 +11,7 @@
     { "path": "./packages/realtime-execution-preparation-engine" },
     { "path": "./packages/realtime-execution-submission-engine" },
     { "path": "./packages/realtime-execution-fill-engine" },
+    { "path": "./packages/realtime-execution-protection-engine" },
     { "path": "./packages/backtest-engine" },
     { "path": "./packages/regime-engine" },
     { "path": "./packages/structure-engine" },

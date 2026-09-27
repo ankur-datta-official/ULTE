@@ -48,6 +48,12 @@
   event and execution lifecycle transition for exact partial/full accumulation, overfill rejection,
   and duplicate/conflict behavior. It performs no provider parsing, adapter call, persistence,
   reconciliation, protection, cancellation, position, PnL, or LIVE-enablement work.
+- Controlled real-time protection orchestration accepts only newly applied Task 022 fills, asks the
+  existing execution policy for exact incremental protection, permits DRY_RUN and SANDBOX while
+  hard-blocking LIVE, validates caller-supplied chronology and registry bindings, and reuses durable
+  reconciliation-aware protection submission. It never recalculates stop, target, side, quantity, or
+  identity and performs no entry/cancellation/modification, exit-fill, position/PnL, reconciliation,
+  provider, or PostgreSQL work.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
