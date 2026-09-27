@@ -33,6 +33,9 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
 
 - `instrument-model` defines canonical instruments and decimal-safe domain values.
 - `market-data` owns normalized market-data contracts and quality semantics.
+- `live-market-data-engine` validates normalized live trades at a provider-neutral boundary, enforces
+  explicit source/stream/epoch identity, bounded deduplication, chronology and no-lookahead rules,
+  and routes only accepted events into the shared `market-data` multi-timeframe candle engine.
 - `backtest-engine` owns deterministic historical replay and reuses `market-data` candle processing.
 - `trading-core` owns shared strategy contracts and deterministic trading semantics used by both live and backtest paths.
 - `regime-engine`, `structure-engine`, `setup-engine`, and `prediction-engine` provide focused analysis capabilities without UI dependencies.

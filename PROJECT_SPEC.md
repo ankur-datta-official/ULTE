@@ -20,6 +20,10 @@
 - Research capabilities: feature research, backtesting, notebooks, and historical validation.
 - Support for multiple asset classes and trading venues.
 - Phase 1 defines venue-neutral instrument identity, decimal-string values, Unix-millisecond time, fixed-duration timeframes, explicit market-data capabilities, and normalized market-data event contracts.
+- Live market-data ingestion uses explicit provider-neutral source, stream, event, and reset-epoch
+  identity; caller-supplied observation boundaries; bounded deterministic deduplication; explicit
+  chronology/gap results; and the same candle implementation as historical replay. It contains no
+  concrete feed transport or provider integration.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

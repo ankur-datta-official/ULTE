@@ -74,6 +74,19 @@ importers:
 
   packages/instrument-model: {}
 
+  packages/live-market-data-engine:
+    dependencies:
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/market-data':
+        specifier: workspace:*
+        version: link:../market-data
+    devDependencies:
+      '@ulte/backtest-engine':
+        specifier: workspace:*
+        version: link:../backtest-engine
+
   packages/market-data:
     dependencies:
       '@ulte/instrument-model':
