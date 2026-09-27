@@ -482,5 +482,3 @@ describe("actual historical/live path through Task 021, Task 022, and Task 023",
     expect(liveAdapter.cancelEntry).not.toHaveBeenCalled();
   });
 });
-
-
