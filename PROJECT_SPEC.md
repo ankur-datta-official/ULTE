@@ -97,6 +97,13 @@
   fail-closes duplicate event IDs, permits post-close settlement costs, and performs no rate/notional
   derivation, net-PnL calculation, FX, tax, slippage, portfolio aggregation, realtime orchestration,
   persistence, or side effect.
+- Deterministic realtime trade cost accounting projection consumes only actionable authoritative
+  entry-fill or exit-fill results and the complete set of canonical cost deliveries already observed
+  at a checkpoint. It obtains the current attempt only from that lifecycle, canonicalizes deliveries,
+  collapses exact same-ID same-payload transport duplicates, rejects conflicting duplicates, and
+  delegates all validation and monetary accounting to the trade cost accounting engine. Rejected
+  outer states do not inspect deliveries; later and post-close costs can replay against the same
+  lifecycle without hidden state, future-event access, arithmetic, persistence, or side effects.
 - Deterministic realtime realized accounting projection consumes only actionable authoritative
   entry-fill or exit-fill results, obtains the current `ExecutionAttempt` exclusively from that
   successful result, and delegates the complete replay to the trade-accounting engine with the

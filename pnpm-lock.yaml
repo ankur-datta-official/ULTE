@@ -632,6 +632,37 @@ importers:
         specifier: workspace:*
         version: link:../risk-engine
 
+  packages/realtime-trade-cost-accounting-engine:
+    dependencies:
+      '@ulte/realtime-execution-exit-fill-engine':
+        specifier: workspace:*
+        version: link:../realtime-execution-exit-fill-engine
+      '@ulte/realtime-execution-fill-engine':
+        specifier: workspace:*
+        version: link:../realtime-execution-fill-engine
+      '@ulte/trade-cost-accounting-engine':
+        specifier: workspace:*
+        version: link:../trade-cost-accounting-engine
+    devDependencies:
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/execution-preparation-engine':
+        specifier: workspace:*
+        version: link:../execution-preparation-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/position-sizing-engine':
+        specifier: workspace:*
+        version: link:../position-sizing-engine
+      '@ulte/realtime-execution-protection-lifecycle-engine':
+        specifier: workspace:*
+        version: link:../realtime-execution-protection-lifecycle-engine
+      '@ulte/realtime-execution-submission-engine':
+        specifier: workspace:*
+        version: link:../realtime-execution-submission-engine
+
   packages/realtime-trade-performance-engine:
     dependencies:
       '@ulte/realtime-trade-valuation-engine':

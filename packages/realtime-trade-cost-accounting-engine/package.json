@@ -1,0 +1,29 @@
+{
+  "name": "@ulte/realtime-trade-cost-accounting-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ulte/realtime-execution-exit-fill-engine": "workspace:*",
+    "@ulte/realtime-execution-fill-engine": "workspace:*",
+    "@ulte/trade-cost-accounting-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@ulte/execution-engine": "workspace:*",
+    "@ulte/execution-preparation-engine": "workspace:*",
+    "@ulte/instrument-model": "workspace:*",
+    "@ulte/position-sizing-engine": "workspace:*",
+    "@ulte/realtime-execution-protection-lifecycle-engine": "workspace:*",
+    "@ulte/realtime-execution-submission-engine": "workspace:*"
+  }
+}

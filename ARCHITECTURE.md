@@ -91,6 +91,12 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   `trade-accounting-engine`, then exactly aggregates positive `DEBIT` and `CREDIT` events in the
   Task027A PnL currency. It derives no charge from rates, notional, quantity, price, or market value
   and performs no net-PnL, FX, tax, slippage, portfolio, realtime, persistence, or side-effect work.
+- `realtime-trade-cost-accounting-engine` gates authoritative Task 022 entry-fill and Task 025B
+  exit-fill results by their outer statuses, takes the current attempt only from an actionable
+  result, canonicalizes already-observed cost deliveries, collapses exact canonical transport
+  duplicates, and fails closed on conflicting same-ID deliveries before delegating once to
+  `trade-cost-accounting-engine`. It owns no cost arithmetic, hidden delivery state, future-event
+  access, rate derivation, provider transport, persistence, or side effect.
 - `trade-valuation-engine` consumes one authoritative execution attempt, delegates all exposure and
   FIFO basis ownership to `trade-accounting-engine`, and values only its current open lots at an
   explicit upstream-resolved instrument/time mark using exact gross linear PnL arithmetic. It makes
