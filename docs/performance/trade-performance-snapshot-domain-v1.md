@@ -7,10 +7,18 @@ immutable gross trade-performance snapshot. It accepts only the execution attemp
 accounting specification, and one canonical `ValuationMark`. It accepts no caller-supplied exposure,
 direction, quantities, open basis, realized PnL, unrealized PnL, total PnL, or as-of time.
 
-Task 028A's `projectUnrealizedTradeValuation` is the sole upstream call. Its result is the sole source
-of both Task 027A's gross realized PnL and Task 028A's gross unrealized PnL. Task 027A remains the
-exclusive realized-accounting, FIFO, chronology, open-basis, direction, quantity, and position-
-exposure authority. This package never calls Task 027A directly and never recreates its work.
+For the standalone API, Task 028A's `projectUnrealizedTradeValuation` is the sole upstream call. A
+canonical Task 028A valuation is always the sole source of both Task 027A's gross realized PnL and
+Task 028A's gross unrealized PnL. Task 027A remains the exclusive realized-accounting, FIFO,
+chronology, open-basis, direction, quantity, and position-exposure authority. This package never
+calls Task 027A directly and never recreates its work.
+
+The public `projectTradePerformanceFromValuation` composition path accepts exactly one complete,
+canonical `UnrealizedTradeValuation` produced by Task 028A or an authoritative wrapper such as Task
+028B. It is not a constructor for caller-selected PnL fields. It repeats the same Task 029A coherence
+checks, aggregation, reference pass-through, and freezing without rerunning valuation. The standalone
+`projectTradePerformanceSnapshot` API remains unchanged: it invokes Task 028A exactly once and then
+uses this composition path.
 
 ## Exact gross aggregation
 

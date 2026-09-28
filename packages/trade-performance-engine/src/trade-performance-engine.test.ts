@@ -22,6 +22,7 @@ import {
 } from "@ulte/trade-valuation-engine";
 import {
   TradePerformanceEngine,
+  projectTradePerformanceFromValuation,
   projectTradePerformanceSnapshot,
 } from "./index.js";
 
@@ -270,6 +271,44 @@ describe("authoritative gross trade performance", () => {
 });
 
 describe("delegation, rejection, provenance, and timestamps", () => {
+  it("composes the same values from one canonical valuation while preserving every authoritative reference", () => {
+    const source = attempt({
+      entries: [{ id: "F1", quantity: "2.75", price: "100", at: 1_001 }],
+      exits: [{ id: "X1", quantity: "1.25", price: "105", at: 1_003 }],
+    });
+    const accountingSpec = spec();
+    const valuationMark = mark("110", 1_010);
+    const valuation = projectUnrealizedTradeValuation(source, accountingSpec, valuationMark);
+    const standalone = projectTradePerformanceSnapshot(source, accountingSpec, valuationMark);
+    expect(valuation.status).toBe("UNREALIZED_VALUATION_PROJECTED");
+    expect(standalone.status).toBe("TRADE_PERFORMANCE_PROJECTED");
+    if (valuation.status !== "UNREALIZED_VALUATION_PROJECTED"
+      || standalone.status !== "TRADE_PERFORMANCE_PROJECTED") return;
+
+    const composed = projectTradePerformanceFromValuation(valuation.valuation);
+    expect(composed.status).toBe("TRADE_PERFORMANCE_PROJECTED");
+    if (composed.status !== "TRADE_PERFORMANCE_PROJECTED") return;
+    expect(composed.snapshot).toEqual(standalone.snapshot);
+    expect(composed.snapshot.unrealizedValuation).toBe(valuation.valuation);
+    expect(composed.snapshot.realizedAccounting).toBe(valuation.valuation.realizedAccounting);
+    expect(composed.snapshot.positionExposure).toBe(valuation.valuation.realizedAccounting.positionExposure);
+  });
+
+  it("rejects an incoherent forged canonical valuation without aggregation", () => {
+    const valuation = projectUnrealizedTradeValuation(attempt({
+      entries: [{ id: "F1", quantity: "1", price: "100", at: 1_001 }],
+    }), spec(), mark("110"));
+    if (valuation.status !== "UNREALIZED_VALUATION_PROJECTED") throw new Error("fixture valuation failed");
+    const forged = Object.freeze({
+      ...valuation.valuation,
+      openQuantity: nonNegativeDecimalString("2"),
+    });
+    expect(projectTradePerformanceFromValuation(forged)).toEqual({
+      status: "TRADE_PERFORMANCE_REJECTED",
+      reason: "PERFORMANCE_AGGREGATION_INCOHERENT",
+    });
+  });
+
   it("matches Task028A authoritative values and preserves nested object identity", () => {
     const source = attempt({
       entries: [{ id: "F1", quantity: "2.75", price: "100", at: 1_001 }],

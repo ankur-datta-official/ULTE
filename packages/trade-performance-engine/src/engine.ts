@@ -28,22 +28,10 @@ function isCoherent(valuation: UnrealizedTradeValuation): boolean {
     && accounting.positionExposure.openQuantity === valuation.openQuantity;
 }
 
-/** Aggregates Task028A's authoritative realized and unrealized gross PnL for one attempt. */
-export function projectTradePerformanceSnapshot(
-  attempt: AuthoritativePerformanceAttempt,
-  accountingSpec: TradePerformanceAccountingSpec,
-  valuationMark: TradePerformanceValuationMark,
+/** Aggregates one complete canonical Task028A valuation without reconstructing its authorities. */
+export function projectTradePerformanceFromValuation(
+  valuation: UnrealizedTradeValuation,
 ): TradePerformanceProjectionResult {
-  const valuationProjection = projectUnrealizedTradeValuation(attempt, accountingSpec, valuationMark);
-  if (valuationProjection.status === "UNREALIZED_VALUATION_REJECTED") {
-    return Object.freeze({
-      status: "TRADE_PERFORMANCE_REJECTED",
-      reason: "UNREALIZED_VALUATION_REJECTED",
-      valuationProjection,
-    });
-  }
-
-  const valuation = valuationProjection.valuation;
   if (!isCoherent(valuation)) return rejectedIncoherent();
   const accounting = valuation.realizedAccounting;
   const grossTotalPnl = addDecimal(accounting.grossRealizedPnl, valuation.grossUnrealizedPnl);
@@ -72,6 +60,23 @@ export function projectTradePerformanceSnapshot(
     unrealizedValuation: valuation,
   });
   return Object.freeze({ status: "TRADE_PERFORMANCE_PROJECTED", snapshot });
+}
+
+/** Values once through Task028A, then delegates aggregation to the canonical composition path. */
+export function projectTradePerformanceSnapshot(
+  attempt: AuthoritativePerformanceAttempt,
+  accountingSpec: TradePerformanceAccountingSpec,
+  valuationMark: TradePerformanceValuationMark,
+): TradePerformanceProjectionResult {
+  const valuationProjection = projectUnrealizedTradeValuation(attempt, accountingSpec, valuationMark);
+  if (valuationProjection.status === "UNREALIZED_VALUATION_REJECTED") {
+    return Object.freeze({
+      status: "TRADE_PERFORMANCE_REJECTED",
+      reason: "UNREALIZED_VALUATION_REJECTED",
+      valuationProjection,
+    });
+  }
+  return projectTradePerformanceFromValuation(valuationProjection.valuation);
 }
 
 export class TradePerformanceEngine {

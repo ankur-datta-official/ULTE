@@ -1,4 +1,8 @@
-export { TradePerformanceEngine, projectTradePerformanceSnapshot } from "./engine.js";
+export {
+  TradePerformanceEngine,
+  projectTradePerformanceFromValuation,
+  projectTradePerformanceSnapshot,
+} from "./engine.js";
 export {
   TRADE_PERFORMANCE_SNAPSHOT_SCHEMA_VERSION,
   type AuthoritativePerformanceAttempt,
