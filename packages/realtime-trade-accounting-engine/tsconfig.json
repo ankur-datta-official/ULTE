@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../position-sizing-engine" },
+    { "path": "../realtime-execution-fill-engine" },
+    { "path": "../realtime-execution-exit-fill-engine" },
+    { "path": "../trade-accounting-engine" }
+  ]
+}

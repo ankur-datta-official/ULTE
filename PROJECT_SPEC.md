@@ -90,6 +90,12 @@
   identity, ambiguous equal-time cross-kind chronology, unavailable basis, and instrument mismatch;
   it performs no realtime orchestration, unrealized/net accounting, fees, FX conversion, portfolio
   aggregation, broker operation, persistence, or settlement rounding.
+- Deterministic realtime realized accounting projection consumes only actionable authoritative
+  entry-fill or exit-fill results, obtains the current `ExecutionAttempt` exclusively from that
+  successful result, and delegates the complete replay to the trade-accounting engine with the
+  canonical linear sizing specification. Rejected or non-actionable outer states do not project;
+  exact duplicates replay the same immutable gross-realized snapshot without local FIFO/PnL state,
+  broker or repository calls, persistence, or any other side effect.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
