@@ -8,9 +8,6 @@
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"],
   "references": [
-    { "path": "../instrument-model" },
-    { "path": "../exact-decimal" },
-    { "path": "../execution-preparation-engine" },
-    { "path": "../execution-engine" }
+    { "path": "../instrument-model" }
   ]
 }

@@ -9,7 +9,7 @@ import {
   unixMs,
   type NonNegativeDecimalString,
 } from "@ulte/instrument-model";
-import { compareDecimal, subtractNonNegative } from "./internal/decimal.js";
+import { compareDecimal, subtractNonNegative } from "@ulte/exact-decimal";
 import {
   POSITION_EXPOSURE_SCHEMA_VERSION,
   type PositionExposure,

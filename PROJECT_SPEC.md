@@ -83,6 +83,13 @@
   and delegates all exposure arithmetic, direction, state, and execution-as-of ownership to the position
   engine. Rejected or non-actionable outer states do not project; exact duplicates deterministically
   replay the same snapshot without local memory, I/O, accounting, valuation, or portfolio aggregation.
+- Authoritative realized trade accounting V1 purely replays one `ExecutionAttempt` V2, delegates
+  direction, open quantity, lifecycle state, and as-of time to the position engine, and uses canonical
+  linear instrument economics plus exact decimal FIFO matching to produce gross realized PnL,
+  auditable matches, and remaining open basis. It fails closed on incoherent histories, duplicate
+  identity, ambiguous equal-time cross-kind chronology, unavailable basis, and instrument mismatch;
+  it performs no realtime orchestration, unrealized/net accounting, fees, FX conversion, portfolio
+  aggregation, broker operation, persistence, or settlement rounding.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

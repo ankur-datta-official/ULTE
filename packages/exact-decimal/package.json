@@ -1,5 +1,5 @@
 {
-  "name": "@ulte/position-engine",
+  "name": "@ulte/exact-decimal",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,11 +14,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ulte/exact-decimal": "workspace:*",
-    "@ulte/execution-engine": "workspace:*",
     "@ulte/instrument-model": "workspace:*"
-  },
-  "devDependencies": {
-    "@ulte/execution-preparation-engine": "workspace:*"
   }
 }

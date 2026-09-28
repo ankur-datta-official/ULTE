@@ -4,6 +4,7 @@
   "files": [],
   "references": [
     { "path": "./packages/instrument-model" },
+    { "path": "./packages/exact-decimal" },
     { "path": "./packages/market-data" },
     { "path": "./packages/live-market-data-engine" },
     { "path": "./packages/realtime-analysis-engine" },
@@ -16,6 +17,7 @@
     { "path": "./packages/realtime-execution-exit-fill-engine" },
     { "path": "./packages/position-engine" },
     { "path": "./packages/realtime-position-exposure-engine" },
+    { "path": "./packages/trade-accounting-engine" },
     { "path": "./packages/backtest-engine" },
     { "path": "./packages/regime-engine" },
     { "path": "./packages/structure-engine" },

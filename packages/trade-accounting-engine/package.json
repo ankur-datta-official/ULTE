@@ -1,5 +1,5 @@
 {
-  "name": "@ulte/position-engine",
+  "name": "@ulte/trade-accounting-engine",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,9 @@
   "dependencies": {
     "@ulte/exact-decimal": "workspace:*",
     "@ulte/execution-engine": "workspace:*",
-    "@ulte/instrument-model": "workspace:*"
+    "@ulte/instrument-model": "workspace:*",
+    "@ulte/position-engine": "workspace:*",
+    "@ulte/position-sizing-engine": "workspace:*"
   },
   "devDependencies": {
     "@ulte/execution-preparation-engine": "workspace:*"

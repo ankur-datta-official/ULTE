@@ -33,6 +33,12 @@ importers:
         specifier: workspace:*
         version: link:../instrument-model
 
+  packages/exact-decimal:
+    dependencies:
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+
   packages/execution-engine:
     dependencies:
       '@ulte/execution-preparation-engine':
@@ -104,6 +110,9 @@ importers:
 
   packages/position-engine:
     dependencies:
+      '@ulte/exact-decimal':
+        specifier: workspace:*
+        version: link:../exact-decimal
       '@ulte/execution-engine':
         specifier: workspace:*
         version: link:../execution-engine
@@ -609,6 +618,28 @@ importers:
       '@ulte/market-data':
         specifier: workspace:*
         version: link:../market-data
+
+  packages/trade-accounting-engine:
+    dependencies:
+      '@ulte/exact-decimal':
+        specifier: workspace:*
+        version: link:../exact-decimal
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/position-engine':
+        specifier: workspace:*
+        version: link:../position-engine
+      '@ulte/position-sizing-engine':
+        specifier: workspace:*
+        version: link:../position-sizing-engine
+    devDependencies:
+      '@ulte/execution-preparation-engine':
+        specifier: workspace:*
+        version: link:../execution-preparation-engine
 
   packages/trade-intent-engine:
     dependencies:

@@ -11,6 +11,8 @@
     { "path": "../instrument-model" },
     { "path": "../exact-decimal" },
     { "path": "../execution-preparation-engine" },
-    { "path": "../execution-engine" }
+    { "path": "../execution-engine" },
+    { "path": "../position-engine" },
+    { "path": "../position-sizing-engine" }
   ]
 }
