@@ -769,6 +769,28 @@ importers:
         specifier: workspace:*
         version: link:../setup-engine
 
+  packages/trade-performance-engine:
+    dependencies:
+      '@ulte/exact-decimal':
+        specifier: workspace:*
+        version: link:../exact-decimal
+      '@ulte/trade-valuation-engine':
+        specifier: workspace:*
+        version: link:../trade-valuation-engine
+    devDependencies:
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/execution-preparation-engine':
+        specifier: workspace:*
+        version: link:../execution-preparation-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/position-sizing-engine':
+        specifier: workspace:*
+        version: link:../position-sizing-engine
+
   packages/trade-valuation-engine:
     dependencies:
       '@ulte/exact-decimal':

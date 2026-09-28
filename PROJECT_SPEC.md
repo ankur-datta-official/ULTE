@@ -107,6 +107,11 @@
   mark, and delegates all accounting and valuation math to the trade-valuation engine. Rejected outer
   states do not project; duplicates and later observed trades replay deterministically without a local
   market cache, lookahead, broker/repository interaction, persistence, or other side effect.
+- Authoritative trade performance snapshot V1 consumes one authoritative `ExecutionAttempt`, the
+  canonical accounting specification, and an explicit valuation mark; delegates once to the
+  authoritative unrealized valuation domain; and exactly adds its nested gross realized PnL and gross
+  unrealized PnL. It preserves upstream exposure, lifecycle, FIFO, valuation, rejection, and as-of
+  semantics without net/cost/return/portfolio calculations, realtime orchestration, or side effects.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

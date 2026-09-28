@@ -90,6 +90,11 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   FIFO basis ownership to `trade-accounting-engine`, and values only its current open lots at an
   explicit upstream-resolved instrument/time mark using exact gross linear PnL arithmetic. It makes
   no bid/ask/last/mid selection, average-basis calculation, realtime orchestration, or side effect.
+- `trade-performance-engine` consumes one authoritative execution attempt, canonical accounting
+  specification, and explicit valuation mark; delegates once to `trade-valuation-engine`; and adds
+  its nested authoritative gross realized PnL to gross unrealized PnL with exact decimal arithmetic.
+  It owns no accounting, FIFO, exposure, valuation, cost/net, analytics, portfolio, realtime, or
+  side-effect behavior.
 - `realtime-trade-valuation-engine` gates authoritative Task 022 entry-fill and Task 025B exit-fill
   results by their outer statuses, takes the current attempt only from an actionable result, resolves
   `LAST_TRADE_V1` exclusively from an already-observed canonical `MarketDataEvent<TradeTick>`, and
