@@ -78,6 +78,10 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   provider-neutral exposure snapshot. It derives exact open quantity, LONG/SHORT direction, and
   no/open/partially-exited/flat-but-entry-active/closed lifecycle semantics without cross-attempt
   netting, orchestration, market valuation, persistence, or financial/PnL accounting.
+- `realtime-position-exposure-engine` gates authoritative Task 022 entry-fill and Task 025B exit-fill
+  results by their outer statuses, takes the current attempt only from an actionable upstream result,
+  and delegates the entire immutable exposure projection to `position-engine`. It owns no alternate
+  attempt/as-of input, arithmetic, lifecycle state, broker or repository interaction, or accounting.
 - `trading-core` owns shared strategy contracts and deterministic trading semantics used by both live and backtest paths.
 - `regime-engine`, `structure-engine`, `setup-engine`, and `prediction-engine` provide focused analysis capabilities without UI dependencies.
 - `setup-engine` consumes public regime and structure evidence plus closed setup-timeframe candles; it emits setup candidates, not executable trade signals.

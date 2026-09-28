@@ -78,6 +78,11 @@
   closed states. It performs no realtime orchestration, cross-attempt netting, PnL, valuation, margin,
   broker, persistence, or reconciliation work, and historical protection coverage is not presented as
   current remaining protected exposure.
+- Deterministic realtime position exposure projection consumes only actionable authoritative entry-fill
+  or exit-fill results, obtains the current `ExecutionAttempt` exclusively from that successful result,
+  and delegates all exposure arithmetic, direction, state, and execution-as-of ownership to the position
+  engine. Rejected or non-actionable outer states do not project; exact duplicates deterministically
+  replay the same snapshot without local memory, I/O, accounting, valuation, or portfolio aggregation.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
