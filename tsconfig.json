@@ -18,6 +18,7 @@
     { "path": "./packages/position-engine" },
     { "path": "./packages/realtime-position-exposure-engine" },
     { "path": "./packages/trade-accounting-engine" },
+    { "path": "./packages/trade-cost-accounting-engine" },
     { "path": "./packages/trade-valuation-engine" },
     { "path": "./packages/trade-performance-engine" },
     { "path": "./packages/realtime-trade-accounting-engine" },

@@ -788,6 +788,28 @@ importers:
         specifier: workspace:*
         version: link:../execution-preparation-engine
 
+  packages/trade-cost-accounting-engine:
+    dependencies:
+      '@ulte/exact-decimal':
+        specifier: workspace:*
+        version: link:../exact-decimal
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/trade-accounting-engine':
+        specifier: workspace:*
+        version: link:../trade-accounting-engine
+    devDependencies:
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/execution-preparation-engine':
+        specifier: workspace:*
+        version: link:../execution-preparation-engine
+      '@ulte/position-sizing-engine':
+        specifier: workspace:*
+        version: link:../position-sizing-engine
+
   packages/trade-intent-engine:
     dependencies:
       '@ulte/instrument-model':

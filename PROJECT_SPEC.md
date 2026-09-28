@@ -90,6 +90,13 @@
   identity, ambiguous equal-time cross-kind chronology, unavailable basis, and instrument mismatch;
   it performs no realtime orchestration, unrealized/net accounting, fees, FX conversion, portfolio
   aggregation, broker operation, persistence, or settlement rounding.
+- Authoritative trade cost accounting V1 consumes one authoritative `ExecutionAttempt`, the canonical
+  accounting specification, and explicit positive monetary `DEBIT`/`CREDIT` cost events; delegates
+  execution-history validation and provenance once to realized accounting; and exactly derives gross
+  debit, gross credit, and net cost in the PnL currency. It binds event identity and chronology,
+  fail-closes duplicate event IDs, permits post-close settlement costs, and performs no rate/notional
+  derivation, net-PnL calculation, FX, tax, slippage, portfolio aggregation, realtime orchestration,
+  persistence, or side effect.
 - Deterministic realtime realized accounting projection consumes only actionable authoritative
   entry-fill or exit-fill results, obtains the current `ExecutionAttempt` exclusively from that
   successful result, and delegates the complete replay to the trade-accounting engine with the
