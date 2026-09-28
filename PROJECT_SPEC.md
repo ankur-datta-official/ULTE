@@ -66,6 +66,12 @@
   chronology, per-request coverage ceilings, and over-exit rejection. A full exit is terminal only
   after entry can no longer add exposure; no position, PnL, broker, persistence, or real-time exit
   projection behavior is included.
+- Deterministic real-time exit-fill projection consumes only a successful Task 024 protection
+  lifecycle, explicit normalized authoritative exit evidence, a caller-supplied observation boundary,
+  and a replay-verifiable current execution-attempt continuation. It reuses the Task 025A constructor
+  and transition for leg identity, protection provenance, chronology, exact partial/full accumulation,
+  duplicate/conflict, coverage, and over-exit semantics, with no price inference, broker/repository
+  call, persistence, reconciliation, position accounting, PnL, or opposite-leg cancellation.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

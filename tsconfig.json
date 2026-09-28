@@ -13,6 +13,7 @@
     { "path": "./packages/realtime-execution-fill-engine" },
     { "path": "./packages/realtime-execution-protection-engine" },
     { "path": "./packages/realtime-execution-protection-lifecycle-engine" },
+    { "path": "./packages/realtime-execution-exit-fill-engine" },
     { "path": "./packages/backtest-engine" },
     { "path": "./packages/regime-engine" },
     { "path": "./packages/structure-engine" },

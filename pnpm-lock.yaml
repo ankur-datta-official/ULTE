@@ -176,6 +176,58 @@ importers:
         specifier: workspace:*
         version: link:../market-data
 
+  packages/realtime-execution-exit-fill-engine:
+    dependencies:
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/realtime-execution-protection-lifecycle-engine':
+        specifier: workspace:*
+        version: link:../realtime-execution-protection-lifecycle-engine
+    devDependencies:
+      '@ulte/backtest-engine':
+        specifier: workspace:*
+        version: link:../backtest-engine
+      '@ulte/broker-adapters':
+        specifier: workspace:*
+        version: link:../broker-adapters
+      '@ulte/live-market-data-engine':
+        specifier: workspace:*
+        version: link:../live-market-data-engine
+      '@ulte/market-data':
+        specifier: workspace:*
+        version: link:../market-data
+      '@ulte/portfolio-risk-engine':
+        specifier: workspace:*
+        version: link:../portfolio-risk-engine
+      '@ulte/position-sizing-engine':
+        specifier: workspace:*
+        version: link:../position-sizing-engine
+      '@ulte/realtime-analysis-engine':
+        specifier: workspace:*
+        version: link:../realtime-analysis-engine
+      '@ulte/realtime-decision-engine':
+        specifier: workspace:*
+        version: link:../realtime-decision-engine
+      '@ulte/realtime-execution-fill-engine':
+        specifier: workspace:*
+        version: link:../realtime-execution-fill-engine
+      '@ulte/realtime-execution-preparation-engine':
+        specifier: workspace:*
+        version: link:../realtime-execution-preparation-engine
+      '@ulte/realtime-execution-protection-engine':
+        specifier: workspace:*
+        version: link:../realtime-execution-protection-engine
+      '@ulte/realtime-execution-submission-engine':
+        specifier: workspace:*
+        version: link:../realtime-execution-submission-engine
+      '@ulte/risk-engine':
+        specifier: workspace:*
+        version: link:../risk-engine
+
   packages/realtime-execution-fill-engine:
     dependencies:
       '@ulte/execution-engine':
