@@ -101,6 +101,12 @@
   and values each current open lot at an explicit validated policy-neutral instrument/time mark using
   exact linear arithmetic. It reports gross unrealized PnL only, chooses no market price policy, uses
   no average basis or rounding, and performs no realtime orchestration, aggregation, or side effect.
+- Deterministic realtime unrealized valuation projection consumes only actionable authoritative
+  entry-fill or exit-fill results and an already-observed canonical trade event. It obtains the current
+  attempt only from the lifecycle result, resolves the explicit `LAST_TRADE_V1` price and event-time
+  mark, and delegates all accounting and valuation math to the trade-valuation engine. Rejected outer
+  states do not project; duplicates and later observed trades replay deterministically without a local
+  market cache, lookahead, broker/repository interaction, persistence, or other side effect.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

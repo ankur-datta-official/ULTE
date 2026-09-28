@@ -1,0 +1,35 @@
+{
+  "name": "@ulte/realtime-trade-valuation-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ulte/market-data": "workspace:*",
+    "@ulte/realtime-execution-exit-fill-engine": "workspace:*",
+    "@ulte/realtime-execution-fill-engine": "workspace:*",
+    "@ulte/trade-valuation-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@ulte/backtest-engine": "workspace:*",
+    "@ulte/broker-adapters": "workspace:*",
+    "@ulte/execution-engine": "workspace:*",
+    "@ulte/execution-preparation-engine": "workspace:*",
+    "@ulte/instrument-model": "workspace:*",
+    "@ulte/live-market-data-engine": "workspace:*",
+    "@ulte/position-sizing-engine": "workspace:*",
+    "@ulte/realtime-execution-preparation-engine": "workspace:*",
+    "@ulte/realtime-execution-protection-engine": "workspace:*",
+    "@ulte/realtime-execution-protection-lifecycle-engine": "workspace:*",
+    "@ulte/realtime-execution-submission-engine": "workspace:*"
+  }
+}

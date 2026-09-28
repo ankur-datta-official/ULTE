@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../market-data" },
+    { "path": "../realtime-execution-fill-engine" },
+    { "path": "../realtime-execution-exit-fill-engine" },
+    { "path": "../trade-valuation-engine" }
+  ]
+}
