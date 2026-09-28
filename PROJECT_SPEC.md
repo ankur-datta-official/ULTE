@@ -96,6 +96,11 @@
   canonical linear sizing specification. Rejected or non-actionable outer states do not project;
   exact duplicates replay the same immutable gross-realized snapshot without local FIFO/PnL state,
   broker or repository calls, persistence, or any other side effect.
+- Authoritative unrealized trade valuation V1 consumes one authoritative `ExecutionAttempt`, delegates
+  exposure, chronology, realized PnL, and FIFO open-basis ownership to the realized accounting domain,
+  and values each current open lot at an explicit validated policy-neutral instrument/time mark using
+  exact linear arithmetic. It reports gross unrealized PnL only, chooses no market price policy, uses
+  no average basis or rounding, and performs no realtime orchestration, aggregation, or side effect.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
