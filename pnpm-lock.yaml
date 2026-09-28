@@ -102,6 +102,19 @@ importers:
         specifier: workspace:*
         version: link:../risk-engine
 
+  packages/position-engine:
+    dependencies:
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+    devDependencies:
+      '@ulte/execution-preparation-engine':
+        specifier: workspace:*
+        version: link:../execution-preparation-engine
+
   packages/position-sizing-engine:
     dependencies:
       '@ulte/instrument-model':

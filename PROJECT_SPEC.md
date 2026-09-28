@@ -72,6 +72,12 @@
   and transition for leg identity, protection provenance, chronology, exact partial/full accumulation,
   duplicate/conflict, coverage, and over-exit semantics, with no price inference, broker/repository
   call, persistence, reconciliation, position accounting, PnL, or opposite-leg cancellation.
+- Authoritative position exposure V1 purely projects one `ExecutionAttempt` V2 into one immutable
+  independent exposure snapshot with exact filled-minus-exited open quantity, entry-derived LONG/SHORT
+  direction, and distinct no-exposure, open, partially-exited, flat-with-active-entry, and terminally
+  closed states. It performs no realtime orchestration, cross-attempt netting, PnL, valuation, margin,
+  broker, persistence, or reconciliation work, and historical protection coverage is not presented as
+  current remaining protected exposure.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
