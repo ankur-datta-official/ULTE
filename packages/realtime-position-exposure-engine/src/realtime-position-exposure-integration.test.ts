@@ -535,7 +535,3 @@ describe("historical/live equivalence through Task 026B", () => {
     expect(historical.broker).not.toBe(live.broker);
   });
 });
-
-
-
-
