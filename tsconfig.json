@@ -22,6 +22,7 @@
     { "path": "./packages/realtime-trade-cost-accounting-engine" },
     { "path": "./packages/trade-valuation-engine" },
     { "path": "./packages/trade-performance-engine" },
+    { "path": "./packages/net-trade-performance-engine" },
     { "path": "./packages/realtime-trade-accounting-engine" },
     { "path": "./packages/realtime-trade-valuation-engine" },
     { "path": "./packages/realtime-trade-performance-engine" },

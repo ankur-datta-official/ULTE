@@ -1,0 +1,28 @@
+{
+  "name": "@ulte/net-trade-performance-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ulte/exact-decimal": "workspace:*",
+    "@ulte/trade-cost-accounting-engine": "workspace:*",
+    "@ulte/trade-performance-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@ulte/execution-engine": "workspace:*",
+    "@ulte/execution-preparation-engine": "workspace:*",
+    "@ulte/instrument-model": "workspace:*",
+    "@ulte/position-sizing-engine": "workspace:*",
+    "@ulte/trade-valuation-engine": "workspace:*"
+  }
+}

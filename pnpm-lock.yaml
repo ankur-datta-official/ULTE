@@ -99,6 +99,34 @@ importers:
         specifier: workspace:*
         version: link:../instrument-model
 
+  packages/net-trade-performance-engine:
+    dependencies:
+      '@ulte/exact-decimal':
+        specifier: workspace:*
+        version: link:../exact-decimal
+      '@ulte/trade-cost-accounting-engine':
+        specifier: workspace:*
+        version: link:../trade-cost-accounting-engine
+      '@ulte/trade-performance-engine':
+        specifier: workspace:*
+        version: link:../trade-performance-engine
+    devDependencies:
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/execution-preparation-engine':
+        specifier: workspace:*
+        version: link:../execution-preparation-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/position-sizing-engine':
+        specifier: workspace:*
+        version: link:../position-sizing-engine
+      '@ulte/trade-valuation-engine':
+        specifier: workspace:*
+        version: link:../trade-valuation-engine
+
   packages/portfolio-risk-engine:
     dependencies:
       '@ulte/instrument-model':

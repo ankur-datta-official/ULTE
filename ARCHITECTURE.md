@@ -106,6 +106,11 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   its nested authoritative gross realized PnL to gross unrealized PnL with exact decimal arithmetic.
   It owns no accounting, FIFO, exposure, valuation, cost/net, analytics, portfolio, realtime, or
   side-effect behavior.
+- `net-trade-performance-engine` combines complete authoritative `trade-performance-engine` and
+  `trade-cost-accounting-engine` snapshots for the same trade/accounting state and introduces only
+  exact `grossTotalPnl - netCostAmount`. It preserves both authorities and their separate valuation
+  and cost evidence clocks, fails closed on semantic incoherence, and performs no cost attribution,
+  FX, tax, slippage, portfolio, realtime, persistence, or side-effect work.
 - `realtime-trade-valuation-engine` gates authoritative Task 022 entry-fill and Task 025B exit-fill
   results by their outer statuses, takes the current attempt only from an actionable result, resolves
   `LAST_TRADE_V1` exclusively from an already-observed canonical `MarketDataEvent<TradeTick>`, and
