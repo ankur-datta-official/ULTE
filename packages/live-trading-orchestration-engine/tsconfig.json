@@ -1,0 +1,31 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.compile-test.ts"],
+  "references": [
+    { "path": "../instrument-model" },
+    { "path": "../execution-engine" },
+    { "path": "../live-market-data-engine" },
+    { "path": "../realtime-analysis-engine" },
+    { "path": "../realtime-decision-engine" },
+    { "path": "../realtime-execution-preparation-engine" },
+    { "path": "../realtime-execution-submission-engine" },
+    { "path": "../realtime-execution-fill-engine" },
+    { "path": "../realtime-execution-protection-engine" },
+    { "path": "../realtime-execution-protection-lifecycle-engine" },
+    { "path": "../realtime-execution-exit-fill-engine" },
+    { "path": "../realtime-position-exposure-engine" },
+    { "path": "../realtime-trade-accounting-engine" },
+    { "path": "../realtime-trade-valuation-engine" },
+    { "path": "../realtime-trade-performance-engine" },
+    { "path": "../realtime-trade-cost-accounting-engine" },
+    { "path": "../realtime-net-trade-performance-engine" },
+    { "path": "../trade-r-multiple-engine" },
+    { "path": "../realtime-trade-r-multiple-engine" }
+  ]
+}

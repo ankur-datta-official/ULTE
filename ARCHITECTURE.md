@@ -126,6 +126,12 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   once to `trade-r-multiple-engine`. It preserves no-projection, upstream-rejection, provenance, and
   authority references without recreating risk, rerunning performance, dividing R, applying FX,
   keeping state, looking ahead, or performing side effects.
+- `live-trading-orchestration-engine` is the pure Option-D planning core for one instrument and one
+  execution-attempt identity. It accepts one observed authority at a time and returns an immutable
+  session plus at most one descriptor for an existing ULTE API call. It supports DRY_RUN and SANDBOX
+  only, stores authority references rather than copied lifecycle state, and performs no engine call,
+  broker/repository interaction, persistence, recovery, financial arithmetic, exit submission, or
+  LIVE execution. A later imperative runner owns stateful engines, side effects, and serialization.
 - `realtime-trade-valuation-engine` gates authoritative Task 022 entry-fill and Task 025B exit-fill
   results by their outer statuses, takes the current attempt only from an actionable result, resolves
   `LAST_TRADE_V1` exclusively from an already-observed canonical `MarketDataEvent<TradeTick>`, and

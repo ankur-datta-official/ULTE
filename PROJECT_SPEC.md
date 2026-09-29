@@ -152,6 +152,12 @@
   authority before risk inspection and delegates projected inputs exactly once to the authoritative
   R-multiple composition, preserving its exact ratio, provenance, rejection tree, and references
   without division, risk/PnL recomputation, FX, hidden state, lookahead, or side effects.
+- Deterministic live-trading orchestration core V1 is a pure, synchronous planner for one instrument
+  and one execution-attempt identity. Given an immutable session and one already-observed input or
+  existing ULTE result, it emits zero or one frozen existing-API invocation descriptor, preserves
+  authoritative execution/risk/projection references, supports only DRY_RUN and SANDBOX, and performs
+  no broker/repository call, persistence, recovery, financial arithmetic, generated identity, exit
+  submission, or LIVE execution. The external runner must serialize calls per session.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
