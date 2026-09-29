@@ -116,6 +116,11 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   preserves each upstream status independently, and delegates projected authorities exactly once to
   `net-trade-performance-engine`. It reruns no upstream engine, performs no financial arithmetic,
   keeps no state, and has no broker, repository, market-data, network, or persistence side effect.
+- `trade-r-multiple-engine` freezes an immutable original risk basis from `EXECUTION_ATTEMPT_V3`
+  `actualRiskAmount`, `accountCurrency`, and `preparedAsOf`, then composes it with one complete
+  Task031A net-performance authority. It requires semantic trade identity and exact same-currency
+  evidence and preserves net R exactly as the source numerator and denominator, without division,
+  risk or PnL recomputation, FX, realtime orchestration, persistence, or side effects.
 - `realtime-trade-valuation-engine` gates authoritative Task 022 entry-fill and Task 025B exit-fill
   results by their outer statuses, takes the current attempt only from an actionable result, resolves
   `LAST_TRADE_V1` exclusively from an already-observed canonical `MarketDataEvent<TradeTick>`, and

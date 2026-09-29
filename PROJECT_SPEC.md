@@ -141,6 +141,12 @@
   statuses independently, and delegates the two projected snapshots once to the authoritative net
   engine. It supports gross-only and cost-only evidence advances, including late closed-trade costs,
   without upstream recomputation, arithmetic, hidden state, lookahead, or side effects.
+- Authoritative net R-multiple snapshot V1 freezes the original execution risk basis exclusively
+  from `EXECUTION_ATTEMPT_V3.actualRiskAmount`, `accountCurrency`, and the execution-preparation
+  boundary, and composes it with a complete Task031A net-performance authority. It requires coherent
+  trade identity and matching PnL/risk currencies, represents net R exactly as the unchanged source
+  numerator and denominator, and performs no division, rounding, risk or PnL recomputation, FX,
+  realtime orchestration, persistence, or side effect.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

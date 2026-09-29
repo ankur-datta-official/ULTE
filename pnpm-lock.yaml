@@ -958,6 +958,34 @@ importers:
         specifier: workspace:*
         version: link:../position-sizing-engine
 
+  packages/trade-r-multiple-engine:
+    dependencies:
+      '@ulte/exact-decimal':
+        specifier: workspace:*
+        version: link:../exact-decimal
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/net-trade-performance-engine':
+        specifier: workspace:*
+        version: link:../net-trade-performance-engine
+    devDependencies:
+      '@ulte/execution-preparation-engine':
+        specifier: workspace:*
+        version: link:../execution-preparation-engine
+      '@ulte/position-sizing-engine':
+        specifier: workspace:*
+        version: link:../position-sizing-engine
+      '@ulte/trade-cost-accounting-engine':
+        specifier: workspace:*
+        version: link:../trade-cost-accounting-engine
+      '@ulte/trade-valuation-engine':
+        specifier: workspace:*
+        version: link:../trade-valuation-engine
+
   packages/trade-valuation-engine:
     dependencies:
       '@ulte/exact-decimal':
