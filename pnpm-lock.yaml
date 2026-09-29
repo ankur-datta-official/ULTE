@@ -777,6 +777,31 @@ importers:
         specifier: workspace:*
         version: link:../realtime-execution-fill-engine
 
+  packages/realtime-trade-r-multiple-engine:
+    dependencies:
+      '@ulte/realtime-net-trade-performance-engine':
+        specifier: workspace:*
+        version: link:../realtime-net-trade-performance-engine
+      '@ulte/trade-r-multiple-engine':
+        specifier: workspace:*
+        version: link:../trade-r-multiple-engine
+    devDependencies:
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/realtime-trade-cost-accounting-engine':
+        specifier: workspace:*
+        version: link:../realtime-trade-cost-accounting-engine
+      '@ulte/realtime-trade-performance-engine':
+        specifier: workspace:*
+        version: link:../realtime-trade-performance-engine
+      '@ulte/trade-cost-accounting-engine':
+        specifier: workspace:*
+        version: link:../trade-cost-accounting-engine
+      '@ulte/trade-performance-engine':
+        specifier: workspace:*
+        version: link:../trade-performance-engine
+
   packages/realtime-trade-valuation-engine:
     dependencies:
       '@ulte/market-data':

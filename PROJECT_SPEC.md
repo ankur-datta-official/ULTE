@@ -147,6 +147,11 @@
   trade identity and matching PnL/risk currencies, represents net R exactly as the unchanged source
   numerator and denominator, and performs no division, rounding, risk or PnL recomputation, FX,
   realtime orchestration, persistence, or side effect.
+- Deterministic realtime net R-multiple projection consumes only a Task031B realtime net-performance
+  result and the existing immutable Task032A trade risk basis. It gates absent or rejected net
+  authority before risk inspection and delegates projected inputs exactly once to the authoritative
+  R-multiple composition, preserving its exact ratio, provenance, rejection tree, and references
+  without division, risk/PnL recomputation, FX, hidden state, lookahead, or side effects.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.
