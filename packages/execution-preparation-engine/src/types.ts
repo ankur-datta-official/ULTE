@@ -1,11 +1,12 @@
 import type {
+  CurrencyCode,
   InstrumentId,
   PositiveDecimalString,
   UnixMs,
 } from "@ulte/instrument-model";
 import type { ReadyTradeIntent, TradeIntentResult } from "@ulte/trade-intent-engine";
 
-export const EXECUTION_PLAN_SCHEMA_VERSION = "EXECUTION_PLAN_V1" as const;
+export const EXECUTION_PLAN_SCHEMA_VERSION = "EXECUTION_PLAN_V2" as const;
 
 export interface ExecutionMarketSnapshotInput {
   readonly instrumentId: string;
@@ -92,6 +93,7 @@ export interface ReadyExecutionPlan {
   readonly exitSide: ExecutionSide;
   readonly quantity: PositiveDecimalString;
   readonly quantityUnit: string;
+  readonly accountCurrency: CurrencyCode;
   readonly entryInstruction: EntryLimitInstruction;
   readonly protectiveStopInstruction: ProtectiveStopInstruction;
   readonly profitTargetInstruction: ProfitTargetInstruction;

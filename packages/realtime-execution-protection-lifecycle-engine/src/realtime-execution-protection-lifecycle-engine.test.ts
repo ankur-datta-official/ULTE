@@ -22,6 +22,7 @@ import {
   type ProtectionRequest,
 } from "@ulte/execution-engine";
 import {
+  currencyCode,
   createInstrumentId,
   positiveDecimalString,
   unixMs,
@@ -52,7 +53,7 @@ const nativeCapabilities = createAdapterCapabilities({
 function readyAttempt(capabilities: AdapterCapabilities = managedCapabilities): ExecutionAttempt {
   const preparation = Object.freeze({
     status: "EXECUTION_PLAN_READY",
-    schemaVersion: "EXECUTION_PLAN_V1",
+    schemaVersion: "EXECUTION_PLAN_V2",
     executionPlanId: "plan-1",
     tradeIntentId: "intent-1",
     candidateId: "candidate-1",
@@ -64,7 +65,7 @@ function readyAttempt(capabilities: AdapterCapabilities = managedCapabilities): 
     entrySide: "BUY",
     exitSide: "SELL",
     quantity: positiveDecimalString("10"),
-    quantityUnit: "contract",
+    quantityUnit: "contract", accountCurrency: currencyCode("USD"),
     entryInstruction: Object.freeze({
       kind: "ENTRY_LIMIT", side: "BUY", price: positiveDecimalString("100"),
       quantity: positiveDecimalString("10"), positionEffect: "OPEN",

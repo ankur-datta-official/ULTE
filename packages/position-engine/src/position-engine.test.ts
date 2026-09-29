@@ -8,6 +8,7 @@ import {
   type ExecutionAttempt,
 } from "@ulte/execution-engine";
 import {
+  currencyCode,
   createInstrumentId,
   nonNegativeDecimalString,
   positiveDecimalString,
@@ -36,7 +37,7 @@ function plan(overrides: Partial<ReadyExecutionPlan> = {}): ReadyExecutionPlan {
   const exitSide = overrides.exitSide ?? "SELL";
   return Object.freeze({
     status: "EXECUTION_PLAN_READY",
-    schemaVersion: "EXECUTION_PLAN_V1",
+    schemaVersion: "EXECUTION_PLAN_V2",
     executionPlanId: "plan-1",
     tradeIntentId: "intent-1",
     candidateId: "candidate-1",
@@ -48,7 +49,7 @@ function plan(overrides: Partial<ReadyExecutionPlan> = {}): ReadyExecutionPlan {
     entrySide,
     exitSide,
     quantity,
-    quantityUnit: "contracts",
+    quantityUnit: "contracts", accountCurrency: currencyCode("USD"),
     entryInstruction: Object.freeze({
       kind: "ENTRY_LIMIT", side: entrySide, price: positiveDecimalString("100"), quantity, positionEffect: "OPEN",
     }),

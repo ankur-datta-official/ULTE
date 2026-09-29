@@ -251,6 +251,7 @@ export function prepareExecutionPlan(input: ExecutionPreparationInput): Executio
     exitSide,
     quantity,
     quantityUnit: tradeIntent.quantityUnit,
+    accountCurrency: tradeIntent.accountCurrency,
     entryInstruction,
     protectiveStopInstruction,
     profitTargetInstruction,

@@ -2,7 +2,7 @@
 
 ## Purpose and boundary
 
-`@ulte/execution-engine` consumes only an authoritative `EXECUTION_PLAN_READY` result and defines how that immutable plan is submitted and tracked through a broker-neutral adapter. Execution preparation decides whether a Trade Intent is currently representable; execution policy preserves its entry, stop, target, quantity, risk, and reward/risk values without recalculation or normalization. V1 contains no broker implementation, credential handling, persistence, retry loop, network call, or external side effect.
+`@ulte/execution-engine` consumes only an authoritative `EXECUTION_PLAN_READY` result and defines how that immutable plan is submitted and tracked through a broker-neutral adapter. Execution preparation decides whether a Trade Intent is currently representable; execution policy preserves its entry, stop, target, quantity, risk, risk denomination, and reward/risk values without recalculation or normalization. The required `EXECUTION_ATTEMPT_V3` contract validates and copies `accountCurrency` from `EXECUTION_PLAN_V2`; every immutable transition preserves it. V1 contains no broker implementation, credential handling, persistence, retry loop, network call, or external side effect.
 
 Adapter submission methods are asynchronous type contracts because real broker I/O is asynchronous; the execution engine itself does not call them or perform any I/O. Entry submission resolves only to an acknowledgement or rejection. Fills are separate asynchronous execution events applied later through `applyEntryFill` after entry acknowledgement, never `submitEntry` return values.
 

@@ -10,6 +10,7 @@ import {
 } from "@ulte/execution-engine";
 import type { ReadyExecutionPlan } from "@ulte/execution-preparation-engine";
 import {
+  currencyCode,
   createInstrumentId,
   positiveDecimalString,
   unixMs,
@@ -37,7 +38,7 @@ function plan(quantity = "10"): ReadyExecutionPlan {
   const normalizedQuantity = positiveDecimalString(quantity);
   return Object.freeze({
     status: "EXECUTION_PLAN_READY",
-    schemaVersion: "EXECUTION_PLAN_V1",
+    schemaVersion: "EXECUTION_PLAN_V2",
     executionPlanId: "plan-1",
     tradeIntentId: "intent-1",
     candidateId: "candidate-1",
@@ -49,7 +50,7 @@ function plan(quantity = "10"): ReadyExecutionPlan {
     entrySide: "BUY",
     exitSide: "SELL",
     quantity: normalizedQuantity,
-    quantityUnit: "contract",
+    quantityUnit: "contract", accountCurrency: currencyCode("USD"),
     entryInstruction: Object.freeze({
       kind: "ENTRY_LIMIT", side: "BUY", price: positiveDecimalString("100"),
       quantity: normalizedQuantity, positionEffect: "OPEN",

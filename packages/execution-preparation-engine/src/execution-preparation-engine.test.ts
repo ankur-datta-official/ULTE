@@ -263,10 +263,23 @@ describe("side mapping and broker-neutral instructions", () => {
     });
   });
 
-  it("copies risk traceability metadata exactly without recomputing", () => {
-    expect(ready()).toMatchObject({
-      approvedRiskAmount: "25.123", actualRiskAmount: "20.246", netRewardRiskBps: "31234",
+  it("copies cross-currency risk provenance exactly without substitution or recomputation", () => {
+    const source = intent({
+      accountCurrency: currencyCode("BDT"),
+      pnlCurrency: currencyCode("USD"),
+      approvedRiskAmount: positiveDecimalString("1200"),
+      actualRiskAmount: positiveDecimalString("1000"),
     });
+    const result = ready({ tradeIntent: source });
+    expect(result).toMatchObject({
+      schemaVersion: "EXECUTION_PLAN_V2",
+      accountCurrency: "BDT",
+      approvedRiskAmount: "1200",
+      actualRiskAmount: "1000",
+      netRewardRiskBps: "31234",
+    });
+    expect(result.accountCurrency).not.toBe(source.pnlCurrency);
+    expect(source).toMatchObject({ accountCurrency: "BDT", pnlCurrency: "USD", actualRiskAmount: "1000" });
   });
 });
 

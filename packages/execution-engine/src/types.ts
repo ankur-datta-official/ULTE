@@ -1,4 +1,5 @@
 import type {
+  CurrencyCode,
   InstrumentId,
   NonNegativeDecimalString,
   PositiveDecimalString,
@@ -9,7 +10,7 @@ import type {
   ExecutionSide,
 } from "@ulte/execution-preparation-engine";
 
-export const EXECUTION_ATTEMPT_SCHEMA_VERSION = "EXECUTION_ATTEMPT_V2" as const;
+export const EXECUTION_ATTEMPT_SCHEMA_VERSION = "EXECUTION_ATTEMPT_V3" as const;
 
 export type ExecutionState =
   | "READY_FOR_ENTRY_SUBMISSION"
@@ -207,6 +208,7 @@ export interface ExecutionAttempt {
   readonly exitSide: ExecutionSide;
   readonly quantity: PositiveDecimalString;
   readonly quantityUnit: string;
+  readonly accountCurrency: CurrencyCode;
   readonly entryPrice: PositiveDecimalString;
   readonly stopTriggerPrice: PositiveDecimalString;
   readonly targetPrice: PositiveDecimalString;

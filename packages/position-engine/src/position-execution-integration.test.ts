@@ -13,7 +13,8 @@ import {
   type ExecutionAttempt,
   type ProtectionRequest,
 } from "@ulte/execution-engine";
-import { createInstrumentId, positiveDecimalString, unixMs } from "@ulte/instrument-model";
+import {
+  currencyCode, createInstrumentId, positiveDecimalString, unixMs } from "@ulte/instrument-model";
 import type { ReadyExecutionPlan } from "@ulte/execution-preparation-engine";
 import { projectPositionExposure } from "./index.js";
 
@@ -31,7 +32,7 @@ function plan(): ReadyExecutionPlan {
   const quantity = positiveDecimalString("10");
   return Object.freeze({
     status: "EXECUTION_PLAN_READY",
-    schemaVersion: "EXECUTION_PLAN_V1",
+    schemaVersion: "EXECUTION_PLAN_V2",
     executionPlanId: "plan-integration",
     tradeIntentId: "intent-integration",
     candidateId: "candidate-integration",
@@ -43,7 +44,7 @@ function plan(): ReadyExecutionPlan {
     entrySide: "BUY",
     exitSide: "SELL",
     quantity,
-    quantityUnit: "contracts",
+    quantityUnit: "contracts", accountCurrency: currencyCode("USD"),
     entryInstruction: Object.freeze({
       kind: "ENTRY_LIMIT", side: "BUY", price: positiveDecimalString("100"), quantity, positionEffect: "OPEN",
     }),

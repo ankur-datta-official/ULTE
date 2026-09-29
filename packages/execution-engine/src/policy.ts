@@ -1,4 +1,5 @@
 import {
+  currencyCode,
   instrumentId,
   nonNegativeDecimalString,
   positiveDecimalString,
@@ -96,13 +97,14 @@ function planIsValid(plan: ReadyExecutionPlan): boolean {
     positiveDecimalString(plan.profitTargetInstruction.price);
     positiveDecimalString(plan.approvedRiskAmount);
     positiveDecimalString(plan.actualRiskAmount);
+    currencyCode(plan.accountCurrency);
     const pricesAreCoherent = plan.entrySide === "BUY"
       ? compareDecimal(plan.protectiveStopInstruction.triggerPrice, plan.entryInstruction.price) < 0
         && compareDecimal(plan.entryInstruction.price, plan.profitTargetInstruction.price) < 0
       : compareDecimal(plan.profitTargetInstruction.price, plan.entryInstruction.price) < 0
         && compareDecimal(plan.entryInstruction.price, plan.protectiveStopInstruction.triggerPrice) < 0;
     if (
-      plan.schemaVersion !== "EXECUTION_PLAN_V1"
+      plan.schemaVersion !== "EXECUTION_PLAN_V2"
       || plan.executionPlanId.length === 0
       || plan.tradeIntentId.length === 0
       || plan.candidateId.length === 0
@@ -233,6 +235,7 @@ export function createExecutionAttempt(plan: ExecutionPreparationResult): Execut
     exitSide: plan.exitSide,
     quantity: plan.quantity,
     quantityUnit: plan.quantityUnit,
+    accountCurrency: plan.accountCurrency,
     entryPrice: plan.entryInstruction.price,
     stopTriggerPrice: plan.protectiveStopInstruction.triggerPrice,
     targetPrice: plan.profitTargetInstruction.price,

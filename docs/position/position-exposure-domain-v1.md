@@ -46,7 +46,7 @@ implies closure, and `NO_EXPOSURE` is never collapsed into `CLOSED`.
 
 ## Validation, time, and determinism
 
-Projection accepts only `EXECUTION_ATTEMPT_V2` with ready attempt status, recognized entry/order
+Projection accepts only `EXECUTION_ATTEMPT_V3` with ready attempt status, recognized entry/order
 states, opposite BUY/SELL sides, valid exact-decimal quantities, entry not exceeding requested,
 exit not exceeding entry, protection not exceeding entry, and coherent unprotected quantity. A flat
 attempt whose entry cannot increase must carry the execution domain's terminal `EXIT_FILLED` state;

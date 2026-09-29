@@ -10,7 +10,7 @@ The caller supplies the execution clock as UTC Unix milliseconds, a same-instrum
 
 ## Exact venue-neutral constraints
 
-The execution spec supplies a positive price tick, positive quantity step, and step-aligned positive minimum and maximum quantities. Entry, invalidation, target, and quantity must be exactly representable. V1 rejects non-representable values instead of rounding because any silent change could invalidate structural risk, net reward-to-risk, or approved monetary risk. Trade Intent values are copied and risk metadata is never recalculated.
+The execution spec supplies a positive price tick, positive quantity step, and step-aligned positive minimum and maximum quantities. Entry, invalidation, target, and quantity must be exactly representable. V1 rejects non-representable values instead of rounding because any silent change could invalidate structural risk, net reward-to-risk, or approved monetary risk. Trade Intent values are copied and risk metadata is never recalculated. The required `EXECUTION_PLAN_V2` contract preserves `accountCurrency` beside `actualRiskAmount`; it never derives that denomination from `pnlCurrency`.
 
 ## Sides, instructions, and market validity
 

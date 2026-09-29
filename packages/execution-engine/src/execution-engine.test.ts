@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  currencyCode,
   createInstrumentId,
   positiveDecimalString,
   unixMs,
@@ -18,6 +19,7 @@ import {
   createExecutionAttempt,
   createExitFillEvent,
   createFillEvent,
+  rejectCancellation,
   rejectEntrySubmission,
   rejectProtection,
   requestEntryCancellation,
@@ -37,7 +39,7 @@ function plan(overrides: Partial<ReadyExecutionPlan> = {}): ReadyExecutionPlan {
   const exitSide = overrides.exitSide ?? "SELL";
   return Object.freeze({
     status: "EXECUTION_PLAN_READY",
-    schemaVersion: "EXECUTION_PLAN_V1",
+    schemaVersion: "EXECUTION_PLAN_V2",
     executionPlanId: "plan-1",
     tradeIntentId: "intent-1",
     candidateId: "candidate-1",
@@ -50,6 +52,7 @@ function plan(overrides: Partial<ReadyExecutionPlan> = {}): ReadyExecutionPlan {
     exitSide,
     quantity,
     quantityUnit: "contracts",
+    accountCurrency: currencyCode("USD"),
     entryInstruction: Object.freeze({
       kind: "ENTRY_LIMIT",
       side: entrySide,
@@ -200,9 +203,9 @@ describe("execution attempt creation and identity", () => {
     });
   });
 
-  it("initializes immutable exit and acknowledged-protection ledgers under schema V2", () => {
+  it("initializes immutable exit and acknowledged-protection ledgers under schema V3", () => {
     const attempt = fresh();
-    expect(attempt.schemaVersion).toBe("EXECUTION_ATTEMPT_V2");
+    expect(attempt.schemaVersion).toBe("EXECUTION_ATTEMPT_V3");
     expect(attempt.processedExitFills).toEqual([]);
     expect(attempt.acknowledgedProtections).toEqual([]);
     expect(Object.isFrozen(attempt.processedExitFills)).toBe(true);
@@ -242,6 +245,155 @@ describe("execution attempt creation and identity", () => {
   it("rejects a malformed ready plan rather than reconstructing it", () => {
     const malformed = { ...plan(), entryInstruction: { ...plan().entryInstruction, quantity: "2" } } as ReadyExecutionPlan;
     expect(createExecutionAttempt(malformed)).toMatchObject({ status: "DATA_REJECTED", reason: "INVALID_EXECUTION_PLAN" });
+  });
+
+  it("copies the authoritative account currency with its unchanged risk amounts", () => {
+    const source = plan({
+      accountCurrency: currencyCode("BDT"),
+      approvedRiskAmount: positiveDecimalString("1200"),
+      actualRiskAmount: positiveDecimalString("1000"),
+    });
+    const before = JSON.stringify(source);
+    const attempt = createExecutionAttempt(source);
+    expect(attempt).toMatchObject({
+      status: "EXECUTION_ATTEMPT_READY",
+      schemaVersion: "EXECUTION_ATTEMPT_V3",
+      accountCurrency: "BDT",
+      approvedRiskAmount: "1200",
+      actualRiskAmount: "1000",
+    });
+    expect(source).toMatchObject({ accountCurrency: "BDT", approvedRiskAmount: "1200", actualRiskAmount: "1000" });
+    expect(JSON.stringify(source)).toBe(before);
+  });
+
+  it("fails closed for missing, malformed, and legacy-schema account-currency plans", () => {
+    const { accountCurrency: _accountCurrency, ...missingCurrency } = plan();
+    const invalidPlans = [
+      missingCurrency,
+      { ...plan(), accountCurrency: " " },
+      { ...plan(), schemaVersion: "EXECUTION_PLAN_V1" },
+    ];
+    for (const invalid of invalidPlans) {
+      expect(createExecutionAttempt(invalid as unknown as ReadyExecutionPlan)).toMatchObject({
+        status: "DATA_REJECTED",
+        reason: "INVALID_EXECUTION_PLAN",
+      });
+    }
+  });
+});
+
+describe("account-currency lifecycle provenance", () => {
+  const bdt = currencyCode("BDT");
+
+  function expectBdt(...attempts: readonly ExecutionAttempt[]): void {
+    for (const attempt of attempts) expect(attempt.accountCurrency).toBe(bdt);
+  }
+
+  it("preserves the risk denomination through entry, protection, exits, and duplicate delivery", () => {
+    const created = fresh({ accountCurrency: bdt, approvedRiskAmount: positiveDecimalString("1200"), actualRiskAmount: positiveDecimalString("1000") });
+    const original = JSON.stringify(created);
+    const submitted = requestEntrySubmission(created, managed);
+    if (submitted.status !== "ENTRY_SUBMISSION_READY") throw new Error("entry request failed");
+    const acknowledged = acknowledgeEntrySubmission(submitted.attempt, {
+      executionAttemptId: created.executionAttemptId,
+      idempotencyKey: submitted.request.idempotencyKey,
+      adapterOrderId: "ORDER-BDT",
+      acknowledgedAt: 1_000,
+    });
+    const entry = {
+      executionAttemptId: created.executionAttemptId,
+      adapterOrderId: "ORDER-BDT",
+      fillId: "ENTRY-BDT-1",
+      filledQuantity: "0.4",
+      fillPrice: "100",
+      filledAt: 1_001,
+    };
+    const partialEntry = applyEntryFill(acknowledged.attempt, entry);
+    const duplicateEntry = applyEntryFill(partialEntry.attempt, entry);
+    const protection = requestProtection(partialEntry.attempt);
+    if (protection.status !== "PROTECTION_REQUEST_READY") throw new Error("protection request failed");
+    const protectedAttempt = acknowledgeProtection(protection.attempt, {
+      executionAttemptId: created.executionAttemptId,
+      protectionRequestId: protection.request.protectionRequestId,
+      idempotencyKey: protection.request.idempotencyKey,
+      protectedQuantity: "0.4",
+      acknowledgedAt: 1_002,
+    });
+    const firstExitInput = exitInput(protectedAttempt.attempt, protection.request, {
+      fillId: "EXIT-BDT-1",
+      filledQuantity: "0.2",
+      filledAt: 1_003,
+    });
+    const partialExit = applyExitFill(protectedAttempt.attempt, firstExitInput);
+    const duplicateExit = applyExitFill(partialExit.attempt, firstExitInput);
+    const fullEntry = applyEntryFill(partialExit.attempt, { ...entry, fillId: "ENTRY-BDT-2", filledQuantity: "0.6", filledAt: 1_004 });
+    const secondProtection = requestProtection(fullEntry.attempt);
+    if (secondProtection.status !== "PROTECTION_REQUEST_READY") throw new Error("second protection request failed");
+    const fullyProtected = acknowledgeProtection(secondProtection.attempt, {
+      executionAttemptId: created.executionAttemptId,
+      protectionRequestId: secondProtection.request.protectionRequestId,
+      idempotencyKey: secondProtection.request.idempotencyKey,
+      protectedQuantity: "1",
+      acknowledgedAt: 1_005,
+    });
+    const closed = applyExitFill(fullyProtected.attempt, exitInput(fullyProtected.attempt, secondProtection.request, {
+      fillId: "EXIT-BDT-2",
+      filledQuantity: "0.8",
+      filledAt: 1_006,
+    }));
+
+    expectBdt(created, submitted.attempt, acknowledged.attempt, partialEntry.attempt, duplicateEntry.attempt,
+      protection.attempt, protectedAttempt.attempt, partialExit.attempt, duplicateExit.attempt, fullEntry.attempt,
+      secondProtection.attempt, fullyProtected.attempt, closed.attempt);
+    expect(duplicateEntry.status).toBe("DUPLICATE_EVENT_IGNORED");
+    expect(duplicateExit.status).toBe("DUPLICATE_EVENT_IGNORED");
+    expect(closed.attempt).toMatchObject({ state: "EXIT_FILLED", actualRiskAmount: "1000", approvedRiskAmount: "1200" });
+    expect(JSON.stringify(created)).toBe(original);
+  });
+
+  it("preserves the denomination through entry, protection, and cancellation rejection branches", () => {
+    const created = fresh({ accountCurrency: bdt });
+    const submitted = requestEntrySubmission(created, managed);
+    if (submitted.status !== "ENTRY_SUBMISSION_READY") throw new Error("entry request failed");
+    const entryRejected = rejectEntrySubmission(submitted.attempt, {
+      executionAttemptId: created.executionAttemptId,
+      idempotencyKey: submitted.request.idempotencyKey,
+      adapterReasonCode: "ENTRY-DENIED",
+      rejectedAt: 1_000,
+    });
+
+    const active = working(managed, { accountCurrency: bdt });
+    const cancelRequested = requestEntryCancellation(active);
+    if (cancelRequested.status !== "CANCELLATION_REQUEST_READY") throw new Error("cancel request failed");
+    const cancelRejected = rejectCancellation(cancelRequested.attempt, {
+      executionAttemptId: active.executionAttemptId,
+      cancellationRequestId: cancelRequested.request.cancellationRequestId,
+      idempotencyKey: cancelRequested.request.idempotencyKey,
+      adapterOrderId: "ORDER-1",
+      adapterReasonCode: "CANCEL-DENIED",
+      rejectedAt: 1_001,
+    });
+    const cancelAcknowledged = acknowledgeCancellation(cancelRequested.attempt, {
+      executionAttemptId: active.executionAttemptId,
+      cancellationRequestId: cancelRequested.request.cancellationRequestId,
+      idempotencyKey: cancelRequested.request.idempotencyKey,
+      adapterOrderId: "ORDER-1",
+      acknowledgedAt: 1_001,
+    });
+
+    const filled = fill(working(managed, { accountCurrency: bdt }), "F-BDT", "0.4", 1_001);
+    const protectionRequested = requestProtection(filled);
+    if (protectionRequested.status !== "PROTECTION_REQUEST_READY") throw new Error("protection request failed");
+    const protectionRejected = rejectProtection(protectionRequested.attempt, {
+      executionAttemptId: filled.executionAttemptId,
+      protectionRequestId: protectionRequested.request.protectionRequestId,
+      idempotencyKey: protectionRequested.request.idempotencyKey,
+      adapterReasonCode: "PROTECTION-DENIED",
+      rejectedAt: 1_002,
+    });
+
+    expectBdt(submitted.attempt, entryRejected.attempt, active, cancelRequested.attempt, cancelRejected.attempt,
+      cancelAcknowledged.attempt, filled, protectionRequested.attempt, protectionRejected.attempt);
   });
 });
 

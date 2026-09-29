@@ -15,7 +15,8 @@ import {
   type ExecutionAttempt,
   type ExitFillEvent,
 } from "@ulte/execution-engine";
-import { createInstrumentId, positiveDecimalString, unixMs } from "@ulte/instrument-model";
+import {
+  currencyCode, createInstrumentId, positiveDecimalString, unixMs } from "@ulte/instrument-model";
 import type {
   ProtectionAcknowledgementAppliedResult,
   RealtimeExecutionProtectionLifecycleResult,
@@ -43,7 +44,7 @@ const nativeCapabilities = createAdapterCapabilities({
 function submittedAttempt(capabilities: AdapterCapabilities = managedCapabilities): ExecutionAttempt {
   const plan = Object.freeze({
     status: "EXECUTION_PLAN_READY",
-    schemaVersion: "EXECUTION_PLAN_V1",
+    schemaVersion: "EXECUTION_PLAN_V2",
     executionPlanId: "plan-1",
     tradeIntentId: "intent-1",
     candidateId: "candidate-1",
@@ -55,7 +56,7 @@ function submittedAttempt(capabilities: AdapterCapabilities = managedCapabilitie
     entrySide: "BUY",
     exitSide: "SELL",
     quantity: positiveDecimalString("10"),
-    quantityUnit: "contract",
+    quantityUnit: "contract", accountCurrency: currencyCode("USD"),
     entryInstruction: Object.freeze({
       kind: "ENTRY_LIMIT", side: "BUY", price: positiveDecimalString("100"),
       quantity: positiveDecimalString("10"), positionEffect: "OPEN",

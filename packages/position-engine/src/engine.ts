@@ -20,7 +20,7 @@ import {
 } from "./types.js";
 
 const ZERO = nonNegativeDecimalString("0");
-const SUPPORTED_EXECUTION_ATTEMPT_SCHEMA_VERSION: string = "EXECUTION_ATTEMPT_V2";
+const SUPPORTED_EXECUTION_ATTEMPT_SCHEMA_VERSION: string = "EXECUTION_ATTEMPT_V3";
 
 const ENTRY_ORDER_STATUSES: readonly EntryOrderStatus[] = [
   "NOT_SUBMITTED",

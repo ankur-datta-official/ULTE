@@ -11,7 +11,8 @@ import {
   type ExecutionAttempt,
   type ProtectionRequest,
 } from "@ulte/execution-engine";
-import { createInstrumentId, positiveDecimalString, unixMs } from "@ulte/instrument-model";
+import {
+  currencyCode, createInstrumentId, positiveDecimalString, unixMs } from "@ulte/instrument-model";
 import type { ReadyExecutionPlan } from "@ulte/execution-preparation-engine";
 import { createLinearInstrumentSizingSpec } from "@ulte/position-sizing-engine";
 import { createValuationMark, projectUnrealizedTradeValuation } from "./index.js";
@@ -22,7 +23,7 @@ function plan(): ReadyExecutionPlan {
   const quantity = positiveDecimalString("5");
   return Object.freeze({
     status: "EXECUTION_PLAN_READY",
-    schemaVersion: "EXECUTION_PLAN_V1",
+    schemaVersion: "EXECUTION_PLAN_V2",
     executionPlanId: "plan-valuation-integration",
     tradeIntentId: "intent-valuation-integration",
     candidateId: "candidate-valuation-integration",
@@ -34,7 +35,7 @@ function plan(): ReadyExecutionPlan {
     entrySide: "BUY",
     exitSide: "SELL",
     quantity,
-    quantityUnit: "contracts",
+    quantityUnit: "contracts", accountCurrency: currencyCode("USD"),
     entryInstruction: Object.freeze({ kind: "ENTRY_LIMIT", side: "BUY", price: positiveDecimalString("100"), quantity, positionEffect: "OPEN" }),
     protectiveStopInstruction: Object.freeze({ kind: "PROTECTIVE_STOP_TRIGGER", side: "SELL", triggerPrice: positiveDecimalString("90"), quantity, positionEffect: "CLOSE" }),
     profitTargetInstruction: Object.freeze({ kind: "PROFIT_TARGET_LIMIT", side: "SELL", price: positiveDecimalString("130"), quantity, positionEffect: "CLOSE" }),

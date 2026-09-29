@@ -43,7 +43,7 @@ import {
   type TradeTick,
 } from "@ulte/market-data";
 import { createAccountRiskSnapshot, createPortfolioRiskConfig } from "@ulte/portfolio-risk-engine";
-import { createLinearInstrumentSizingSpec } from "@ulte/position-sizing-engine";
+import { createFxConversionSnapshot, createLinearInstrumentSizingSpec } from "@ulte/position-sizing-engine";
 import {
   RealtimeAnalysisEngine,
   type RealtimeAnalysisConfig,
@@ -219,7 +219,7 @@ function decisionContext(asOf: number): DecisionContext {
     riskConfig: createRiskQualificationConfig({ minimumNetRewardRiskBps: 30_000 }),
     account: createAccountRiskSnapshot({
       asOf,
-      baseCurrency: currencyCode("USD"),
+      baseCurrency: currencyCode("BDT"),
       currentEquity: "10000",
       dayStartEquity: "10000",
       openPositions: [],
@@ -245,6 +245,12 @@ function decisionContext(asOf: number): DecisionContext {
       minimumQuantity: "1",
       maximumQuantity: "1000",
       pnlValuePerPriceUnitPerQuantity: "1",
+    }),
+    fxConversion: createFxConversionSnapshot({
+      asOf,
+      fromCurrency: "USD",
+      toCurrency: "BDT",
+      rate: "1",
     }),
   };
 }
@@ -393,6 +399,18 @@ describe("actual historical/live path through Task 021 and Task 022", () => {
     expect(historicalFinal.preparation.preparationCycleId).toBe(liveFinal.preparation.preparationCycleId);
     if (historicalFinal.preparation.status !== "EXECUTION_PREPARED"
       || liveFinal.preparation.status !== "EXECUTION_PREPARED") throw new Error("expected prepared paths");
+    if (historicalFinal.decision.status !== "TRADE_INTENT_CREATED") throw new Error("expected ready trade intent");
+
+    const sourceIntent = historicalFinal.decision.tradeIntentResult;
+    const sourcePlan = historicalFinal.preparation.executionPreparationResult;
+    expect(sourceIntent).toMatchObject({ accountCurrency: "BDT", pnlCurrency: "USD" });
+    expect(sourceIntent.approvedRiskAmount).not.toBe(sourceIntent.actualRiskAmount);
+    expect(sourcePlan).toMatchObject({
+      schemaVersion: "EXECUTION_PLAN_V2",
+      accountCurrency: "BDT",
+      approvedRiskAmount: sourceIntent.approvedRiskAmount,
+      actualRiskAmount: sourceIntent.actualRiskAmount,
+    });
 
     const historicalRepository = new MemoryRepository();
     const liveRepository = new MemoryRepository();
@@ -400,6 +418,12 @@ describe("actual historical/live path through Task 021 and Task 022", () => {
     const liveAdapter = adapter();
     const historicalSubmission = await submit(historicalFinal.preparation, historicalRepository, historicalAdapter);
     const liveSubmission = await submit(liveFinal.preparation, liveRepository, liveAdapter);
+    expect(historicalSubmission.executionAttempt).toMatchObject({
+      schemaVersion: "EXECUTION_ATTEMPT_V3",
+      accountCurrency: "BDT",
+      approvedRiskAmount: sourceIntent.approvedRiskAmount,
+      actualRiskAmount: sourceIntent.actualRiskAmount,
+    });
     const historicalFill = projectFill(historicalSubmission);
     const liveFill = projectFill(liveSubmission);
     expect(historicalSubmission.executionAttempt.executionPlanId).toBe(liveSubmission.executionAttempt.executionPlanId);

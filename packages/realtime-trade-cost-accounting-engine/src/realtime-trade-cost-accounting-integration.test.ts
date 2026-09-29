@@ -10,7 +10,8 @@ import {
   requestProtection,
 } from "@ulte/execution-engine";
 import type { ReadyExecutionPlan } from "@ulte/execution-preparation-engine";
-import { createInstrumentId, positiveDecimalString, unixMs } from "@ulte/instrument-model";
+import {
+  currencyCode, createInstrumentId, positiveDecimalString, unixMs } from "@ulte/instrument-model";
 import { createLinearInstrumentSizingSpec } from "@ulte/position-sizing-engine";
 import { applyRealtimeExecutionExitFill } from "@ulte/realtime-execution-exit-fill-engine";
 import { applyRealtimeExecutionFill, initializeRealtimeExecutionFillLifecycle } from "@ulte/realtime-execution-fill-engine";
@@ -43,7 +44,7 @@ const accountingSpec = createLinearInstrumentSizingSpec({
 function plan(): ReadyExecutionPlan {
   return Object.freeze({
     status: "EXECUTION_PLAN_READY",
-    schemaVersion: "EXECUTION_PLAN_V1",
+    schemaVersion: "EXECUTION_PLAN_V2",
     executionPlanId: "integration-plan",
     tradeIntentId: "integration-intent",
     candidateId: "integration-candidate",
@@ -55,7 +56,7 @@ function plan(): ReadyExecutionPlan {
     entrySide: "BUY",
     exitSide: "SELL",
     quantity,
-    quantityUnit: "contracts",
+    quantityUnit: "contracts", accountCurrency: currencyCode("USD"),
     entryInstruction: Object.freeze({
       kind: "ENTRY_LIMIT", side: "BUY", price: positiveDecimalString("100"), quantity, positionEffect: "OPEN",
     }),

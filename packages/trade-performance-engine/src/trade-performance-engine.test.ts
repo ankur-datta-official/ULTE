@@ -8,6 +8,7 @@ import {
   type FillEvent,
 } from "@ulte/execution-engine";
 import {
+  currencyCode,
   createInstrumentId,
   nonNegativeDecimalString,
   positiveDecimalString,
@@ -92,7 +93,7 @@ function attempt(fixture: AttemptFixture = {}): ExecutionAttempt {
   const latestAt = [...entries, ...exits].reduce((latest, fill) => fill.at > latest ? fill.at : latest, 1_000);
   return Object.freeze({
     status: "EXECUTION_ATTEMPT_READY",
-    schemaVersion: "EXECUTION_ATTEMPT_V2",
+    schemaVersion: "EXECUTION_ATTEMPT_V3",
     executionAttemptId: "attempt-1",
     executionPlanId: "plan-1",
     tradeIntentId: "intent-1",
@@ -102,7 +103,7 @@ function attempt(fixture: AttemptFixture = {}): ExecutionAttempt {
     entrySide,
     exitSide,
     quantity: positiveDecimalString(fixture.quantity ?? (filled === "0" ? "10" : filled)),
-    quantityUnit: "contracts",
+    quantityUnit: "contracts", accountCurrency: currencyCode("USD"),
     entryPrice: positiveDecimalString("100"),
     stopTriggerPrice: positiveDecimalString(entrySide === "BUY" ? "90" : "110"),
     targetPrice: positiveDecimalString(entrySide === "BUY" ? "130" : "70"),

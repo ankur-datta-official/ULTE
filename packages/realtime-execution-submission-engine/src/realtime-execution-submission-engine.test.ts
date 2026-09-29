@@ -89,7 +89,7 @@ const capabilities = createAdapterCapabilities({
 function prepared(preparationAsOf = 1_000): RealtimeExecutionPreparationResult {
   const plan = Object.freeze({
     status: "EXECUTION_PLAN_READY",
-    schemaVersion: "EXECUTION_PLAN_V1",
+    schemaVersion: "EXECUTION_PLAN_V2",
     executionPlanId: "plan-1",
     tradeIntentId: "intent-1",
     candidateId: "candidate-1",
@@ -101,7 +101,7 @@ function prepared(preparationAsOf = 1_000): RealtimeExecutionPreparationResult {
     entrySide: "BUY",
     exitSide: "SELL",
     quantity: positiveDecimalString("1"),
-    quantityUnit: "contract",
+    quantityUnit: "contract", accountCurrency: currencyCode("USD"),
     entryInstruction: Object.freeze({
       kind: "ENTRY_LIMIT", side: "BUY", price: positiveDecimalString("100"),
       quantity: positiveDecimalString("1"), positionEffect: "OPEN",

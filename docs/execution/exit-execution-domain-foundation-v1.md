@@ -44,9 +44,9 @@ supported using the existing decimal-safe arithmetic. An exit may not make cumul
 quantity exceed the referenced request's cumulative coverage ceiling, total protected quantity, or
 total filled entry quantity. Excess is rejected; values are never clamped.
 
-Because these fields materially change the persisted/public aggregate shape,
-`EXECUTION_ATTEMPT_SCHEMA_VERSION` is `EXECUTION_ATTEMPT_V2`. As in V1, that version participates in
-deterministic attempt and operation identity.
+These exit fields originally changed the persisted/public aggregate to `EXECUTION_ATTEMPT_V2`.
+The current `EXECUTION_ATTEMPT_V3` additionally requires the upstream account-currency provenance;
+as in prior versions, the current version participates in deterministic attempt and operation identity.
 
 After an early exit, later entry fills remain valid while the entry order is `WORKING`. For example,
 fill/protect/exit 2.75, then fill another 1.25, leaves filled 4, protected 2.75, and exited 2.75.
