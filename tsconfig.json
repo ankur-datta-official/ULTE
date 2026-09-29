@@ -26,6 +26,7 @@
     { "path": "./packages/realtime-trade-accounting-engine" },
     { "path": "./packages/realtime-trade-valuation-engine" },
     { "path": "./packages/realtime-trade-performance-engine" },
+    { "path": "./packages/realtime-net-trade-performance-engine" },
     { "path": "./packages/backtest-engine" },
     { "path": "./packages/regime-engine" },
     { "path": "./packages/structure-engine" },

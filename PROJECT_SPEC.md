@@ -126,12 +126,21 @@
   authoritative unrealized valuation domain; and exactly adds its nested gross realized PnL and gross
   unrealized PnL. It preserves upstream exposure, lifecycle, FIFO, valuation, rejection, and as-of
   semantics without net/cost/return/portfolio calculations, realtime orchestration, or side effects.
+- Deterministic realtime trade performance projection consumes only an authoritative realtime
+  valuation result, preserves source/lifecycle/mark-policy provenance, and delegates gross
+  aggregation to the authoritative trade performance engine without rerunning valuation or doing
+  financial arithmetic.
 - Authoritative net trade performance snapshot V1 combines complete gross-performance and
   cost-accounting authorities for one coherent trade state and introduces only exact
   `netTotalPnl = grossTotalPnl - netCostAmount`. It preserves gross and cost components, nested
   authority references, and separate execution, valuation, and cost clocks; permits late post-close
   costs; and deliberately defers net realized/unrealized attribution, FX, tax, slippage, portfolio,
   realtime, persistence, and side-effect behavior.
+- Deterministic realtime net trade performance projection consumes only Task029B and Task030B
+  authority results, requires source-kind and projection-state coherence, preserves their upstream
+  statuses independently, and delegates the two projected snapshots once to the authoritative net
+  engine. It supports gross-only and cost-only evidence advances, including late closed-trade costs,
+  without upstream recomputation, arithmetic, hidden state, lookahead, or side effects.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

@@ -111,11 +111,19 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   exact `grossTotalPnl - netCostAmount`. It preserves both authorities and their separate valuation
   and cost evidence clocks, fails closed on semantic incoherence, and performs no cost attribution,
   FX, tax, slippage, portfolio, realtime, persistence, or side-effect work.
+- `realtime-net-trade-performance-engine` consumes only complete Task029B realtime gross-performance
+  and Task030B realtime cost-accounting results. It requires coherent source and projection states,
+  preserves each upstream status independently, and delegates projected authorities exactly once to
+  `net-trade-performance-engine`. It reruns no upstream engine, performs no financial arithmetic,
+  keeps no state, and has no broker, repository, market-data, network, or persistence side effect.
 - `realtime-trade-valuation-engine` gates authoritative Task 022 entry-fill and Task 025B exit-fill
   results by their outer statuses, takes the current attempt only from an actionable result, resolves
   `LAST_TRADE_V1` exclusively from an already-observed canonical `MarketDataEvent<TradeTick>`, and
   delegates all accounting and valuation semantics to `trade-valuation-engine`. It owns no alternate
   attempt or mark input, market cache, arithmetic, side effect, or historical/live observation state.
+- `realtime-trade-performance-engine` consumes only an authoritative realtime valuation result and
+  delegates projected valuation composition to `trade-performance-engine`, preserving source,
+  lifecycle-status, and `LAST_TRADE_V1` provenance without resolving marks or doing arithmetic.
 - `realtime-trade-accounting-engine` gates authoritative Task 022 entry-fill and Task 025B exit-fill
   results by their outer statuses, takes the current attempt only from an actionable upstream result,
   and delegates the entire immutable realized-accounting replay to `trade-accounting-engine` with the
