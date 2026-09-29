@@ -158,6 +158,12 @@
   authoritative execution/risk/projection references, supports only DRY_RUN and SANDBOX, and performs
   no broker/repository call, persistence, recovery, financial arithmetic, generated identity, exit
   submission, or LIVE execution. The external runner must serialize calls per session.
+- Serialized sandbox orchestration runner V1 owns one in-memory live-trading orchestration session,
+  fails closed on concurrent dispatch, invokes the deterministic planner exactly once per accepted
+  dispatch, and executes at most one planned command through configured existing public APIs. It
+  preserves exact planner, command, session, and domain-result references; performs no automatic
+  result feedback, hidden retry, queueing, persistence, recovery, market subscription, generated
+  identity, financial arithmetic, or exit submission; and cannot represent production LIVE mode.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

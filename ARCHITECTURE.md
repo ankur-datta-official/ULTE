@@ -132,6 +132,12 @@ ULTE is a monorepo of deployable applications, reusable domain packages, and res
   only, stores authority references rather than copied lifecycle state, and performs no engine call,
   broker/repository interaction, persistence, recovery, financial arithmetic, exit submission, or
   LIVE execution. A later imperative runner owns stateful engines, side effects, and serialization.
+- `sandbox-orchestration-runner` is the thin imperative Task033B boundary around one Task033A
+  session. It rejects concurrent dispatch instead of queueing, invokes the planner once, executes at
+  most one descriptor through injected existing public APIs, and never feeds a result back
+  automatically. It supports DRY_RUN and SANDBOX only, adds defense-in-depth around side-effect
+  commands, and owns no broker adapter, repository, persistence, retry, market subscription,
+  financial arithmetic, exit submission, restart recovery, or production LIVE capability.
 - `realtime-trade-valuation-engine` gates authoritative Task 022 entry-fill and Task 025B exit-fill
   results by their outer statuses, takes the current attempt only from an actionable result, resolves
   `LAST_TRADE_V1` exclusively from an already-observed canonical `MarketDataEvent<TradeTick>`, and
