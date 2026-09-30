@@ -12,6 +12,13 @@ import {
   isExactIntegerMultiple,
 } from "./internal/decimal.js";
 import {
+  createExecutionInstructions,
+  currentExecutablePrice,
+  executionSides,
+  marketRemainsEligible,
+  pricesAreCoherent,
+} from "./internal/plan-semantics.js";
+import {
   EXECUTION_PLAN_SCHEMA_VERSION,
   type ExecutionPreparationDataRejectionReason,
   type ExecutionPreparationInput,
@@ -153,10 +160,9 @@ export function prepareExecutionPlan(input: ExecutionPreparationInput): Executio
     return rejected("INVALID_PRICE_DIRECTION", tradeIntent.candidateId, tradeIntent.intentId);
   }
 
-  const validDirection = tradeIntent.direction === "UP"
-    ? compareDecimal(invalidation, entry) < 0 && compareDecimal(entry, target) < 0
-    : compareDecimal(target, entry) < 0 && compareDecimal(entry, invalidation) < 0;
-  if (!validDirection) return rejected("INVALID_PRICE_DIRECTION", tradeIntent.candidateId, tradeIntent.intentId);
+  if (!pricesAreCoherent(tradeIntent.direction, entry, invalidation, target)) {
+    return rejected("INVALID_PRICE_DIRECTION", tradeIntent.candidateId, tradeIntent.intentId);
+  }
 
   const prices: readonly (readonly [FailedPriceField, PositiveDecimalString])[] = [
     ["ENTRY", entry],
@@ -179,50 +185,25 @@ export function prepareExecutionPlan(input: ExecutionPreparationInput): Executio
     return notPreparable("QUANTITY_NOT_STEP_ALIGNED", tradeIntent.intentId, tradeIntent.candidateId);
   }
 
-  if (tradeIntent.direction === "UP") {
-    if (compareDecimal(bid, invalidation) <= 0) {
-      return notPreparable("MARKET_ALREADY_INVALIDATED", tradeIntent.intentId, tradeIntent.candidateId);
-    }
-    if (compareDecimal(ask, target) >= 0) {
-      return notPreparable("TARGET_ALREADY_REACHED", tradeIntent.intentId, tradeIntent.candidateId);
-    }
-  } else {
-    if (compareDecimal(ask, invalidation) >= 0) {
-      return notPreparable("MARKET_ALREADY_INVALIDATED", tradeIntent.intentId, tradeIntent.candidateId);
-    }
-    if (compareDecimal(bid, target) <= 0) {
-      return notPreparable("TARGET_ALREADY_REACHED", tradeIntent.intentId, tradeIntent.candidateId);
-    }
+  if (!marketRemainsEligible(tradeIntent.direction, bid, ask, invalidation, target)) {
+    const marketInvalidated = tradeIntent.direction === "UP"
+      ? compareDecimal(bid, invalidation) <= 0
+      : compareDecimal(ask, invalidation) >= 0;
+    return notPreparable(
+      marketInvalidated ? "MARKET_ALREADY_INVALIDATED" : "TARGET_ALREADY_REACHED",
+      tradeIntent.intentId,
+      tradeIntent.candidateId,
+    );
   }
 
-  const entrySide = tradeIntent.direction === "UP" ? "BUY" : "SELL";
-  const exitSide = tradeIntent.direction === "UP" ? "SELL" : "BUY";
-  const currentExecutablePrice = tradeIntent.direction === "UP" ? ask : bid;
-  if (deviationExceedsBps(currentExecutablePrice, entry, input.config.maxEntryDeviationBps)) {
+  const { entrySide, exitSide } = executionSides(tradeIntent.direction);
+  const executablePrice = currentExecutablePrice(tradeIntent.direction, bid, ask);
+  if (deviationExceedsBps(executablePrice, entry, input.config.maxEntryDeviationBps)) {
     return notPreparable("ENTRY_DEVIATION_EXCEEDED", tradeIntent.intentId, tradeIntent.candidateId);
   }
 
-  const entryInstruction = Object.freeze({
-    kind: "ENTRY_LIMIT" as const,
-    side: entrySide,
-    price: entry,
-    quantity,
-    positionEffect: "OPEN" as const,
-  });
-  const protectiveStopInstruction = Object.freeze({
-    kind: "PROTECTIVE_STOP_TRIGGER" as const,
-    side: exitSide,
-    triggerPrice: invalidation,
-    quantity,
-    positionEffect: "CLOSE" as const,
-  });
-  const profitTargetInstruction = Object.freeze({
-    kind: "PROFIT_TARGET_LIMIT" as const,
-    side: exitSide,
-    price: target,
-    quantity,
-    positionEffect: "CLOSE" as const,
-  });
+  const { entryInstruction, protectiveStopInstruction, profitTargetInstruction } =
+    createExecutionInstructions(tradeIntent.direction, entry, invalidation, target, quantity);
   const executionPlanId = createExecutionPlanId({
     tradeIntentId: tradeIntent.intentId,
     executionAsOf,
@@ -261,7 +242,7 @@ export function prepareExecutionPlan(input: ExecutionPreparationInput): Executio
     askAtPreparation: ask,
     intentAgeMs,
     quoteAgeMs,
-    entryDeviationBps: deviationBpsFloor(currentExecutablePrice, entry),
+    entryDeviationBps: deviationBpsFloor(executablePrice, entry),
     approvedRiskAmount: tradeIntent.approvedRiskAmount,
     actualRiskAmount: tradeIntent.actualRiskAmount,
     netRewardRiskBps: tradeIntent.netRewardRiskBps,

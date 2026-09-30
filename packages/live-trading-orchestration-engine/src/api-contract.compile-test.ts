@@ -1,6 +1,7 @@
 import type { InstrumentId } from "@ulte/instrument-model";
 import {
   createLiveTradingOrchestrationSession,
+  hydrateLiveTradingOrchestrationSession,
   planLiveTradingStep,
   type LiveTradingOrchestrationInput,
   type LiveTradingOrchestrationSession,
@@ -13,6 +14,12 @@ declare const instrumentId: InstrumentId;
 planLiveTradingStep(session, input);
 createLiveTradingOrchestrationSession({ sessionId: "caller-owned", mode: "DRY_RUN", instrumentId });
 createLiveTradingOrchestrationSession({ sessionId: "caller-owned", mode: "SANDBOX", instrumentId });
+hydrateLiveTradingOrchestrationSession({
+  schemaVersion: "LIVE_TRADING_ORCHESTRATION_SESSION_V1",
+  sessionId: "caller-owned",
+  mode: "SANDBOX",
+  instrumentId,
+});
 
 // @ts-expect-error LIVE is not representable in V1.
 createLiveTradingOrchestrationSession({ sessionId: "caller-owned", mode: "LIVE", instrumentId });
@@ -27,4 +34,13 @@ planLiveTradingStep(session, {
   // @ts-expect-error Arbitrary broker instructions are not orchestration inputs.
   kind: "BROKER_ORDER_OVERRIDE",
   order: {},
+});
+
+hydrateLiveTradingOrchestrationSession({
+  schemaVersion: "LIVE_TRADING_ORCHESTRATION_SESSION_V1",
+  sessionId: "caller-owned",
+  mode: "DRY_RUN",
+  instrumentId,
+  // @ts-expect-error Hydration accepts authority objects, not raw lifecycle fields.
+  filledQuantity: "1",
 });

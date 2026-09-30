@@ -8,6 +8,8 @@ import type {
 import type {
   ExecutionPreparationResult,
   ExecutionSide,
+  ReadyExecutionPlan,
+  ReadyExecutionPlanRecoveryDataV2,
 } from "@ulte/execution-preparation-engine";
 
 export const EXECUTION_ATTEMPT_SCHEMA_VERSION = "EXECUTION_ATTEMPT_V3" as const;
@@ -339,3 +341,69 @@ export interface ExecutionAdapter {
   submitProtection(request: ProtectionRequest): Promise<ProtectionSubmissionResponse>;
   cancelEntry(request: EntryCancellationRequest): Promise<CancellationSubmissionResponse>;
 }
+
+export const EXECUTION_ATTEMPT_RECOVERY_EVIDENCE_SCHEMA_VERSION =
+  "EXECUTION_ATTEMPT_RECOVERY_EVIDENCE_V1" as const;
+
+export interface ExecutionAttemptRecoveryIdentity {
+  readonly executionAttemptId: string;
+  readonly executionPlanId: string;
+  readonly tradeIntentId: string;
+  readonly candidateId: string;
+  readonly instrumentId: InstrumentId;
+}
+
+export interface ExecutionAttemptRecoveryInitialization {
+  readonly executionPlanRecoveryData: ReadyExecutionPlanRecoveryDataV2;
+}
+
+export type ExecutionAttemptRecoveryTransition =
+  | Readonly<{ readonly kind: "ENTRY_SUBMISSION_REQUESTED"; readonly adapterCapabilities: AdapterCapabilitiesInput }>
+  | Readonly<{ readonly kind: "ENTRY_SUBMISSION_ACKNOWLEDGED"; readonly acknowledgement: EntryAcknowledgementInput }>
+  | Readonly<{ readonly kind: "ENTRY_SUBMISSION_REJECTED"; readonly rejection: EntryRejectionInput }>
+  | Readonly<{ readonly kind: "ENTRY_FILL_APPLIED"; readonly fill: FillEventInput }>
+  | Readonly<{ readonly kind: "PROTECTION_REQUESTED" }>
+  | Readonly<{ readonly kind: "PROTECTION_ACKNOWLEDGED"; readonly acknowledgement: ProtectionAcknowledgementInput }>
+  | Readonly<{ readonly kind: "PROTECTION_REJECTED"; readonly rejection: ProtectionRejectionInput }>
+  | Readonly<{ readonly kind: "ENTRY_CANCELLATION_REQUESTED" }>
+  | Readonly<{ readonly kind: "ENTRY_CANCELLATION_ACKNOWLEDGED"; readonly acknowledgement: CancellationAcknowledgementInput }>
+  | Readonly<{ readonly kind: "ENTRY_CANCELLATION_REJECTED"; readonly rejection: CancellationRejectionInput }>
+  | Readonly<{ readonly kind: "EXIT_FILL_APPLIED"; readonly fill: ExitFillEventInput }>;
+
+export interface ExecutionAttemptRecoveryEvidenceV1 {
+  readonly schemaVersion: typeof EXECUTION_ATTEMPT_RECOVERY_EVIDENCE_SCHEMA_VERSION;
+  readonly identity: ExecutionAttemptRecoveryIdentity;
+  readonly initialization: ExecutionAttemptRecoveryInitialization;
+  readonly transitions: readonly ExecutionAttemptRecoveryTransition[];
+}
+
+export type ExecutionAttemptRecoveryEvidenceValidationResult =
+  | Readonly<{
+      readonly status: "EXECUTION_ATTEMPT_RECOVERY_EVIDENCE_VALID";
+      readonly evidence: ExecutionAttemptRecoveryEvidenceV1;
+    }>
+  | Readonly<{
+      readonly status: "EXECUTION_ATTEMPT_RECOVERY_EVIDENCE_INVALID";
+      readonly reason:
+        | "INVALID_RECOVERY_EVIDENCE"
+        | "UNSUPPORTED_RECOVERY_SCHEMA"
+        | "RECOVERY_IDENTITY_INCOHERENT";
+    }>;
+
+export type ExecutionAttemptRestorationResult =
+  | Readonly<{
+      readonly status: "EXECUTION_ATTEMPT_RESTORED";
+      readonly executionPlan: ReadyExecutionPlan;
+      readonly executionAttempt: ExecutionAttempt;
+    }>
+  | Readonly<{
+      readonly status: "EXECUTION_ATTEMPT_RESTORATION_REJECTED";
+      readonly reason:
+        | "INVALID_RECOVERY_EVIDENCE"
+        | "UNSUPPORTED_RECOVERY_SCHEMA"
+        | "RECOVERY_IDENTITY_INCOHERENT"
+        | "EXECUTION_TRANSITION_REJECTED";
+      readonly transitionIndex?: number;
+      readonly transitionKind?: ExecutionAttemptRecoveryTransition["kind"];
+      readonly authorityReason?: string;
+    }>;

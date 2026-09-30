@@ -19,5 +19,10 @@
     "@ulte/position-sizing-engine": "workspace:*",
     "@ulte/risk-engine": "workspace:*",
     "@ulte/setup-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@ulte/market-data": "workspace:*",
+    "@ulte/regime-engine": "workspace:*",
+    "@ulte/structure-engine": "workspace:*"
   }
 }

@@ -25,6 +25,11 @@ export {
   selectProtectionMode,
 } from "./policy.js";
 export {
+  restoreExecutionAttemptFromEvidence,
+  validateExecutionAttemptRecoveryEvidence,
+} from "./recovery.js";
+export {
+  EXECUTION_ATTEMPT_RECOVERY_EVIDENCE_SCHEMA_VERSION,
   EXECUTION_ATTEMPT_SCHEMA_VERSION,
   type AdapterCapabilities,
   type AcknowledgedProtection,
@@ -51,6 +56,12 @@ export {
   type ExitLeg,
   type ExecutionAdapter,
   type ExecutionAttempt,
+  type ExecutionAttemptRecoveryEvidenceV1,
+  type ExecutionAttemptRecoveryEvidenceValidationResult,
+  type ExecutionAttemptRecoveryIdentity,
+  type ExecutionAttemptRecoveryInitialization,
+  type ExecutionAttemptRecoveryTransition,
+  type ExecutionAttemptRestorationResult,
   type ExecutionAttemptCreationResult,
   type ExecutionAttemptUpdatedResult,
   type ExecutionNotSupportedResult,

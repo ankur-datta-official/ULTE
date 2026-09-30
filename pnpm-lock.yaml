@@ -1081,6 +1081,16 @@ importers:
       '@ulte/setup-engine':
         specifier: workspace:*
         version: link:../setup-engine
+    devDependencies:
+      '@ulte/market-data':
+        specifier: workspace:*
+        version: link:../market-data
+      '@ulte/regime-engine':
+        specifier: workspace:*
+        version: link:../regime-engine
+      '@ulte/structure-engine':
+        specifier: workspace:*
+        version: link:../structure-engine
 
   packages/trade-performance-engine:
     dependencies:

@@ -156,14 +156,24 @@
   and one execution-attempt identity. Given an immutable session and one already-observed input or
   existing ULTE result, it emits zero or one frozen existing-API invocation descriptor, preserves
   authoritative execution/risk/projection references, supports only DRY_RUN and SANDBOX, and performs
-  no broker/repository call, persistence, recovery, financial arithmetic, generated identity, exit
-  submission, or LIVE execution. The external runner must serialize calls per session.
+  no broker/repository call, persistence, financial arithmetic, generated identity, exit submission,
+  or LIVE execution. Its hydration boundary accepts only already-authoritative execution, recreated
+  risk-basis, and optional coherent latest-R objects, preserving exact references without parsing
+  durable data. The external runner must serialize calls per session.
 - Serialized sandbox orchestration runner V1 owns one in-memory live-trading orchestration session,
   fails closed on concurrent dispatch, invokes the deterministic planner exactly once per accepted
   dispatch, and executes at most one planned command through configured existing public APIs. It
   preserves exact planner, command, session, and domain-result references; performs no automatic
   result feedback, hidden retry, queueing, persistence, recovery, market subscription, generated
   identity, financial arithmetic, or exit submission; and cannot represent production LIVE mode.
+- Execution authority restoration V1 stores no aggregate snapshot shortcut: the preparation engine
+  restores the complete historical V2 preparation input graph and returns the exact
+  `ReadyExecutionPlan` produced by `prepareExecutionPlan`; that exact reference initializes execution authority before ordered lifecycle
+  evidence is replayed through existing pure execution-engine transitions. Restoration is local and
+  synchronous, rejects malformed plan semantics, identity conflicts, and illegal chronology, and
+  performs no broker resubmission, reconciliation, persistence, market-stream recovery, generated
+  identity, or wall-clock read. Durable storage belongs to Phase33B; crash boot coordination and
+  ambiguous-side-effect reconciliation belong to Phase33C.
 - PostgreSQL and Redis-backed infrastructure where later requirements justify them.
 - Python tooling for quantitative research, backtesting, and machine learning where later requirements justify it.
 - Containerization and continuous integration in later engineering phases.

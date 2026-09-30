@@ -65,6 +65,30 @@ export interface CreateLiveTradingOrchestrationSessionInput {
   readonly instrumentId: string;
 }
 
+export interface HydrateLiveTradingOrchestrationSessionInput {
+  readonly schemaVersion: typeof LIVE_TRADING_ORCHESTRATION_SESSION_SCHEMA_VERSION;
+  readonly sessionId: string;
+  readonly mode: LiveTradingOrchestrationMode;
+  readonly instrumentId: string;
+  readonly latestExecutionAttempt?: ExecutionAttempt;
+  readonly riskBasis?: TradeRiskBasis;
+  readonly latestRealtimeRMultiple?: TradeRMultipleProjectedRealtimeResult;
+}
+
+export type LiveTradingOrchestrationSessionHydrationResult =
+  | Readonly<{
+      readonly status: "ORCHESTRATION_SESSION_HYDRATED";
+      readonly session: LiveTradingOrchestrationSession;
+    }>
+  | Readonly<{
+      readonly status: "ORCHESTRATION_SESSION_HYDRATION_REJECTED";
+      readonly reason:
+        | "HYDRATION_INVALID_SESSION"
+        | "HYDRATION_AUTHORITY_INCOHERENT"
+        | "HYDRATION_RISK_BASIS_INCOHERENT"
+        | "HYDRATION_R_MULTIPLE_INCOHERENT";
+    }>;
+
 export const LIVE_TRADING_ORCHESTRATION_CAPABILITIES_V1 = Object.freeze({
   restartRecoverySupported: false,
   callerMustSerializePerSession: true,

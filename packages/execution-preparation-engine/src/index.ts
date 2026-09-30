@@ -4,8 +4,11 @@ export {
   createInstrumentExecutionSpec,
 } from "./contracts.js";
 export { prepareExecutionPlan } from "./evaluator.js";
+export { restoreReadyExecutionPlan } from "./recovery.js";
 export {
   EXECUTION_PLAN_SCHEMA_VERSION,
+  READY_EXECUTION_PLAN_RECOVERY_DATA_V1_SCHEMA_VERSION,
+  READY_EXECUTION_PLAN_RECOVERY_DATA_SCHEMA_VERSION,
   type EntryLimitInstruction,
   type ExecutionMarketSnapshot,
   type ExecutionMarketSnapshotInput,
@@ -22,6 +25,13 @@ export {
   type ProfitTargetInstruction,
   type ProtectiveStopInstruction,
   type ReadyExecutionPlan,
+  type ReadyExecutionPlanRecoveryDataV1,
+  type ReadyExecutionPlanRecoveryDataV2,
+  type ReadyExecutionPlanRecoveryEntryInstructionV1,
+  type ReadyExecutionPlanRecoveryStopInstructionV1,
+  type ReadyExecutionPlanRecoveryTargetInstructionV1,
+  type ReadyExecutionPlanRecoverySelectorV2,
+  type ReadyExecutionPlanRestorationResult,
   type RejectedExecutionPreparationResult,
   type UpstreamNotReadyExecutionPreparationResult,
 } from "./types.js";
