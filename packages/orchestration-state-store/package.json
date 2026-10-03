@@ -14,7 +14,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ulte/broker-adapters": "workspace:*",
     "@ulte/execution-engine": "workspace:*",
+    "@ulte/execution-reconciliation-engine": "workspace:*",
     "@ulte/instrument-model": "workspace:*"
   }
 }

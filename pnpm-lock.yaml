@@ -189,9 +189,15 @@ importers:
 
   packages/orchestration-state-store:
     dependencies:
+      '@ulte/broker-adapters':
+        specifier: workspace:*
+        version: link:../broker-adapters
       '@ulte/execution-engine':
         specifier: workspace:*
         version: link:../execution-engine
+      '@ulte/execution-reconciliation-engine':
+        specifier: workspace:*
+        version: link:../execution-reconciliation-engine
       '@ulte/instrument-model':
         specifier: workspace:*
         version: link:../instrument-model
