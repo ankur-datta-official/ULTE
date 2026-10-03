@@ -80,6 +80,15 @@ importers:
 
   packages/instrument-model: {}
 
+  packages/orchestration-state-store:
+    dependencies:
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+
   packages/live-market-data-engine:
     dependencies:
       '@ulte/instrument-model':
