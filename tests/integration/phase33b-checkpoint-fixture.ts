@@ -28,8 +28,9 @@ function selector(plan: ReadyExecutionPlan): ReadyExecutionPlanRecoverySelectorV
 
 export function checkpointEvidence(
   transitions: readonly ExecutionAttemptRecoveryTransition[] = [],
+  quantity = "12",
 ): ExecutionAttemptRecoveryEvidenceV1 {
-  const intent = createReadyTradeIntentRecoveryFixture("12");
+  const intent = createReadyTradeIntentRecoveryFixture(quantity);
   const marketSnapshot = { instrumentId: PHASE33A_INSTRUMENT, asOf: PHASE33A_AS_OF + 50,
     bid: intent.tradeIntent.entryReferencePrice, ask: intent.tradeIntent.entryReferencePrice };
   const instrumentExecutionSpec = { instrumentId: PHASE33A_INSTRUMENT, priceTick: "1", quantityStep: "1",
