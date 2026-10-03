@@ -12,7 +12,9 @@ import {
   type IdempotencyClaimInput,
   type IdempotencyClaimResult,
   type IdempotencyOperation,
+  classifyIdempotencyOutcome,
   type IdempotencyOutcomeInput,
+  type IdempotencyOutcomeResult,
   type IdempotencyRecord,
   type IdempotencyRecordStatus,
   type IdempotencyRepository,
@@ -137,31 +139,20 @@ class FakeRepository implements IdempotencyRepository {
     return this.records.get(key(adapterId, idempotencyKey));
   }
 
-  async recordOutcome(input: IdempotencyOutcomeInput): Promise<IdempotencyRecord> {
+  async recordOutcome(input: IdempotencyOutcomeInput): Promise<IdempotencyOutcomeResult> {
     this.events.push(`record:${input.status}`);
     this.durableEnvironments.push(input.environment);
-    const mapKey = key(input.adapterId, input.idempotencyKey);
-    const current = this.records.get(mapKey);
-    if (current === undefined) throw new Error("missing record");
-    if (current.requestFingerprint !== input.requestFingerprint) throw new Error("fingerprint conflict");
+    const entry = [...this.records.entries()].find(([, record]) =>
+      record.adapterId === input.adapterId && record.idempotencyKey === input.idempotencyKey);
+    if (entry === undefined) throw new Error("outcome without claim");
+    const [key, current] = entry;
     if (current.environment !== input.environment) throw new Error("environment conflict");
-    if (input.updatedAt < current.updatedAt) throw new RangeError("updatedAt moved backwards");
-    const record = createIdempotencyRecord({
-      adapterId: current.adapterId,
-      environment: current.environment,
-      idempotencyKey: current.idempotencyKey,
-      executionAttemptId: current.executionAttemptId,
-      operation: current.operation,
-      requestFingerprint: current.requestFingerprint,
-      status: input.status,
-      createdAt: current.createdAt,
-      updatedAt: input.updatedAt,
-      ...(input.adapterOrderId === undefined
-        ? current.adapterOrderId === undefined ? {} : { adapterOrderId: current.adapterOrderId }
-        : { adapterOrderId: input.adapterOrderId }),
-    });
-    this.records.set(mapKey, record);
-    return record;
+    if (current.requestFingerprint !== input.requestFingerprint) throw new Error("fingerprint conflict");
+    const result = classifyIdempotencyOutcome(current, input);
+    if (result.status === "APPLIED_TRANSITION" || result.status === "APPLIED_ENRICHMENT") {
+      this.records.set(key, result.record);
+    }
+    return result;
   }
 
   preload(
@@ -575,6 +566,28 @@ describe("reconciliation", () => {
     expect(result.record.status).toBe("OUTCOME_UNKNOWN");
   });
 
+  it("enriches a STILL_UNKNOWN order ID once and returns the durable duplicate without submission", async () => {
+    const { repository, request } = setup();
+    const reconciliationProvider = provider({ status: "STILL_UNKNOWN", adapterOrderId: "ORDER-1" });
+    const broker = adapter();
+    const first = await reconcileExecutionOutcome({
+      provider: reconciliationProvider, idempotencyRepository: repository,
+      request, occurredAt: 3_000,
+    });
+    expect(first).toMatchObject({ status: "RECONCILIATION_REQUIRED", record: {
+      status: "OUTCOME_UNKNOWN", adapterOrderId: "ORDER-1", updatedAt: 3_000,
+    } });
+    const second = await reconcileExecutionOutcome({
+      provider: reconciliationProvider, idempotencyRepository: repository,
+      request, occurredAt: 4_000,
+    });
+    expect(second).toMatchObject({ status: "RECONCILIATION_REQUIRED", record: {
+      status: "OUTCOME_UNKNOWN", adapterOrderId: "ORDER-1", updatedAt: 3_000,
+    } });
+    expect(reconciliationProvider.reconcile).toHaveBeenCalledTimes(2);
+    expect(broker.submitEntry).not.toHaveBeenCalled();
+  });
+
   it("rejects a reconciliation environment mismatch without calling the provider", async () => {
     const { repository, request } = setup();
     const liveRequest = createReconciliationRequest({ ...request, environment: "LIVE" });
@@ -693,7 +706,7 @@ describe("immutability, time, and audit isolation", () => {
       idempotencyRepository: repository,
       request: entry(),
       occurredAt: 2_000,
-    })).rejects.toThrow("updatedAt moved backwards");
+    })).rejects.toThrow("updatedAt cannot move backwards");
     expect(broker.submitEntry).not.toHaveBeenCalled();
   });
 

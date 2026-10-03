@@ -12,7 +12,9 @@ import {
   type ExecutionEnvironment,
   type IdempotencyClaimInput,
   type IdempotencyClaimResult,
+  classifyIdempotencyOutcome,
   type IdempotencyOutcomeInput,
+  type IdempotencyOutcomeResult,
   type IdempotencyRecord,
   type IdempotencyRecordStatus,
   type IdempotencyRepository,
@@ -180,21 +182,19 @@ class DurableMemoryRepository implements IdempotencyRepository {
     return this.records.get(storageKey(adapterId, idempotencyKey));
   }
 
-  async recordOutcome(input: IdempotencyOutcomeInput): Promise<IdempotencyRecord> {
+  async recordOutcome(input: IdempotencyOutcomeInput): Promise<IdempotencyOutcomeResult> {
     this.events.push(`record:${input.status}`);
-    const key = storageKey(input.adapterId, input.idempotencyKey);
-    const current = this.records.get(key);
-    if (current === undefined) throw new Error("outcome without claim");
+    const entry = [...this.records.entries()].find(([, record]) =>
+      record.adapterId === input.adapterId && record.idempotencyKey === input.idempotencyKey);
+    if (entry === undefined) throw new Error("outcome without claim");
+    const [key, current] = entry;
     if (current.environment !== input.environment) throw new Error("environment conflict");
     if (current.requestFingerprint !== input.requestFingerprint) throw new Error("fingerprint conflict");
-    const next = createIdempotencyRecord({
-      ...current,
-      status: input.status,
-      updatedAt: input.updatedAt,
-      ...(input.adapterOrderId === undefined ? {} : { adapterOrderId: input.adapterOrderId }),
-    });
-    this.records.set(key, next);
-    return next;
+    const result = classifyIdempotencyOutcome(current, input);
+    if (result.status === "APPLIED_TRANSITION" || result.status === "APPLIED_ENRICHMENT") {
+      this.records.set(key, result.record);
+    }
+    return result;
   }
 
   forceOnlyRecordStatus(status: IdempotencyRecordStatus): void {

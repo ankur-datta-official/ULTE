@@ -12,6 +12,7 @@ import {
   identifier,
   snapshotObservation,
   snapshotRecord,
+  persistOutcome,
   type AuditContext,
 } from "./internal.js";
 import type {
@@ -190,7 +191,7 @@ export async function reconcileExecutionOutcome(
 
   const observation = snapshotObservation(await input.provider.reconcile(input.request));
   if (observation.status === "CONFIRMED_ACCEPTED") {
-    const record = await input.idempotencyRepository.recordOutcome({
+    const record = await persistOutcome(input.idempotencyRepository, {
       adapterId,
       environment: input.request.environment,
       idempotencyKey: input.request.idempotencyKey,
@@ -212,7 +213,7 @@ export async function reconcileExecutionOutcome(
     return result;
   }
   if (observation.status === "CONFIRMED_REJECTED") {
-    const record = await input.idempotencyRepository.recordOutcome({
+    const record = await persistOutcome(input.idempotencyRepository, {
       adapterId,
       environment: input.request.environment,
       idempotencyKey: input.request.idempotencyKey,
@@ -234,7 +235,7 @@ export async function reconcileExecutionOutcome(
     return result;
   }
   if (observation.status === "CONFIRMED_NOT_SUBMITTED") {
-    const record = await input.idempotencyRepository.recordOutcome({
+    const record = await persistOutcome(input.idempotencyRepository, {
       adapterId,
       environment: input.request.environment,
       idempotencyKey: input.request.idempotencyKey,
@@ -259,7 +260,7 @@ export async function reconcileExecutionOutcome(
     });
     return result;
   }
-  const record = await input.idempotencyRepository.recordOutcome({
+  const record = await persistOutcome(input.idempotencyRepository, {
     adapterId,
     environment: input.request.environment,
     idempotencyKey: input.request.idempotencyKey,

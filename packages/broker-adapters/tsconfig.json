@@ -6,7 +6,7 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/broker-adapters.test.ts"],
+  "exclude": ["src/broker-adapters.test.ts", "src/idempotency-state-machine.test.ts"],
   "references": [
     { "path": "../instrument-model" },
     { "path": "../execution-engine" }

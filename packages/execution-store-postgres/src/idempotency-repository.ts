@@ -1,6 +1,7 @@
 import {
   IDEMPOTENCY_OPERATIONS,
   brokerAdapterId,
+  classifyIdempotencyOutcome,
   createIdempotencyRecord,
   isExecutionEnvironment,
   type BrokerAdapterId,
@@ -8,6 +9,7 @@ import {
   type IdempotencyClaimResult,
   type IdempotencyOperation,
   type IdempotencyOutcomeInput,
+  type IdempotencyOutcomeResult,
   type IdempotencyRecord,
   type IdempotencyRepository,
 } from "@ulte/broker-adapters";
@@ -57,8 +59,24 @@ WHERE adapter_id = $1
   AND execution_attempt_id = $4
   AND operation = $5
   AND request_fingerprint = $6
+  AND status = $10
   AND updated_at_ms <= $8
   AND (adapter_order_id IS NULL OR $9 IS NULL OR adapter_order_id = $9)
+RETURNING ${RETURNING_COLUMNS}`;
+
+const ENRICHMENT_UPDATE_SQL = `/* execution-store-postgres:outcome-enrich */
+UPDATE broker_idempotency_records
+SET adapter_order_id = $7,
+    updated_at_ms = $8
+WHERE adapter_id = $1
+  AND environment = $2
+  AND idempotency_key = $3
+  AND execution_attempt_id = $4
+  AND operation = $5
+  AND request_fingerprint = $6
+  AND status = 'OUTCOME_UNKNOWN'
+  AND adapter_order_id IS NULL
+  AND updated_at_ms <= $8
 RETURNING ${RETURNING_COLUMNS}`;
 
 type OutcomeWithIdentityAssertions = IdempotencyOutcomeInput & {
@@ -122,6 +140,7 @@ function validateOutcome(input: OutcomeWithIdentityAssertions): void {
     throw new TypeError("Invalid idempotency outcome status");
   }
   if (input.executionAttemptId !== undefined) identifier(input.executionAttemptId, "executionAttemptId");
+  if (input.adapterOrderId !== undefined) identifier(input.adapterOrderId, "adapterOrderId");
   if (
     input.operation !== undefined
     && !(IDEMPOTENCY_OPERATIONS as readonly string[]).includes(input.operation)
@@ -186,7 +205,7 @@ export class PostgresIdempotencyRepository implements IdempotencyRepository {
     return mapIdempotencyRow(result.rows[0]!);
   }
 
-  public recordOutcome(input: OutcomeWithIdentityAssertions): Promise<IdempotencyRecord> {
+  public recordOutcome(input: OutcomeWithIdentityAssertions): Promise<IdempotencyOutcomeResult> {
     validateOutcome(input);
     return this.executor.transaction(async (transaction: PostgresTransaction) => {
       const selected = await transaction.query<IdempotencyRow>(OUTCOME_SELECT_SQL, [
@@ -218,34 +237,41 @@ export class PostgresIdempotencyRepository implements IdempotencyRepository {
           "updatedAt cannot move backwards",
         );
       }
-      if (
-        current.adapterOrderId !== undefined
-        && input.adapterOrderId !== undefined
-        && current.adapterOrderId !== input.adapterOrderId
-      ) {
-        throw new PersistenceConflictError(
-          "ADAPTER_ORDER_ID_CONFLICT",
-          "adapterOrderId cannot replace an existing durable identifier",
-        );
+      let classified: IdempotencyOutcomeResult;
+      try {
+        classified = classifyIdempotencyOutcome(current, input);
+      } catch (error) {
+        if (error instanceof Error && "code" in error && error.code === "ADAPTER_ORDER_ID_CONFLICT") {
+          throw new PersistenceConflictError("ADAPTER_ORDER_ID_CONFLICT", error.message);
+        }
+        throw error;
       }
-      const updated = await transaction.query<IdempotencyRow>(OUTCOME_UPDATE_SQL, [
+      if (classified.status === "DUPLICATE_SAME" || classified.status === "STATUS_CONFLICT") {
+        return classified;
+      }
+      const identityParameters = [
         current.adapterId,
         current.environment,
         current.idempotencyKey,
         current.executionAttemptId,
         current.operation,
         current.requestFingerprint,
-        input.status,
-        input.updatedAt,
-        input.adapterOrderId ?? null,
-      ]);
+      ];
+      const updated = classified.status === "APPLIED_ENRICHMENT"
+        ? await transaction.query<IdempotencyRow>(ENRICHMENT_UPDATE_SQL, [
+          ...identityParameters, input.adapterOrderId, input.updatedAt,
+        ])
+        : await transaction.query<IdempotencyRow>(OUTCOME_UPDATE_SQL, [
+          ...identityParameters, input.status, input.updatedAt, input.adapterOrderId ?? null,
+          current.status,
+        ]);
       if (updated.rows.length !== 1) {
         throw new PersistenceConflictError(
-          "IMMUTABLE_IDENTITY_CONFLICT",
-          "Conditional outcome update rejected a concurrent identity or monotonicity change",
+          "CONCURRENT_OUTCOME_CONFLICT",
+          "Conditional outcome update rejected a concurrent status, fact, or monotonicity change",
         );
       }
-      return mapIdempotencyRow(updated.rows[0]!);
+      return Object.freeze({ status: classified.status, record: mapIdempotencyRow(updated.rows[0]!) });
     });
   }
 }

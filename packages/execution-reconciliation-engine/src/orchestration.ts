@@ -27,6 +27,7 @@ import {
   snapshotAcknowledgement,
   snapshotFailure,
   snapshotRecord,
+  persistOutcome,
   snapshotRejection,
   unknownFailure,
   type AuditContext,
@@ -177,7 +178,7 @@ async function handleAdapterFailure(
   const failure = isBrokerFailure(thrown) ? snapshotFailure(thrown) : unknownFailure();
   const disposition = classifyRetryDisposition(failure);
   if (disposition === "REQUIRES_RECONCILIATION") {
-    const record = await input.idempotencyRepository.recordOutcome({
+    const record = await persistOutcome(input.idempotencyRepository, {
       adapterId: input.adapter.descriptor.adapterId,
       environment: input.adapter.descriptor.environment,
       idempotencyKey: input.request.idempotencyKey,
@@ -195,7 +196,7 @@ async function handleAdapterFailure(
     );
   }
   if (disposition === "RETRY_SAFE") {
-    const record = await input.idempotencyRepository.recordOutcome({
+    const record = await persistOutcome(input.idempotencyRepository, {
       adapterId: input.adapter.descriptor.adapterId,
       environment: input.adapter.descriptor.environment,
       idempotencyKey: input.request.idempotencyKey,
@@ -221,7 +222,7 @@ async function handleAdapterFailure(
     });
   }
   const durableStatus = failure.category === "ORDER_REJECTED" ? "REJECTED" : "FAILED_NOT_SUBMITTED";
-  const record = await input.idempotencyRepository.recordOutcome({
+  const record = await persistOutcome(input.idempotencyRepository, {
     adapterId: input.adapter.descriptor.adapterId,
     environment: input.adapter.descriptor.environment,
     idempotencyKey: input.request.idempotencyKey,
@@ -274,7 +275,7 @@ async function orchestrate<
     await emitAudit(context, "CLAIMED");
   }
 
-  await input.idempotencyRepository.recordOutcome({
+  await persistOutcome(input.idempotencyRepository, {
     adapterId: input.adapter.descriptor.adapterId,
     environment: input.adapter.descriptor.environment,
     idempotencyKey: input.request.idempotencyKey,
@@ -298,7 +299,7 @@ async function orchestrate<
     );
   }
   if (classification.type === "ACKNOWLEDGEMENT") {
-    const record = await input.idempotencyRepository.recordOutcome({
+    const record = await persistOutcome(input.idempotencyRepository, {
       adapterId: input.adapter.descriptor.adapterId,
       environment: input.adapter.descriptor.environment,
       idempotencyKey: input.request.idempotencyKey,
@@ -321,7 +322,7 @@ async function orchestrate<
       acknowledgement: snapshotAcknowledgement(response as Acknowledgement) as Acknowledgement,
     });
   }
-  const record = await input.idempotencyRepository.recordOutcome({
+  const record = await persistOutcome(input.idempotencyRepository, {
       adapterId: input.adapter.descriptor.adapterId,
       environment: input.adapter.descriptor.environment,
       idempotencyKey: input.request.idempotencyKey,

@@ -75,6 +75,65 @@ export interface IdempotencyOutcomeInput {
   readonly adapterOrderId?: string;
 }
 
+export type IdempotencyOutcomeResult =
+  | { readonly status: "APPLIED_TRANSITION" | "APPLIED_ENRICHMENT" | "DUPLICATE_SAME"; readonly record: IdempotencyRecord }
+  | { readonly status: "STATUS_CONFLICT"; readonly record: IdempotencyRecord };
+
+export class AdapterOrderIdConflictError extends Error {
+  public override readonly name = "AdapterOrderIdConflictError";
+  public readonly code = "ADAPTER_ORDER_ID_CONFLICT";
+}
+
+const LEGAL_OUTCOME_EDGES: Readonly<Record<IdempotencyRecordStatus, readonly IdempotencyOutcomeInput["status"][]>> = {
+  CLAIMED: ["SUBMITTED", "CONFIRMED", "REJECTED", "OUTCOME_UNKNOWN", "RETRY_AUTHORIZED"],
+  SUBMITTED: ["CONFIRMED", "REJECTED", "OUTCOME_UNKNOWN", "RETRY_AUTHORIZED", "FAILED_NOT_SUBMITTED"],
+  OUTCOME_UNKNOWN: ["CONFIRMED", "REJECTED", "RETRY_AUTHORIZED"],
+  RETRY_AUTHORIZED: ["SUBMITTED"],
+  CONFIRMED: [],
+  REJECTED: [],
+  FAILED_NOT_SUBMITTED: [],
+};
+
+/** Pure authority for outcome state changes and the one source-proven fact enrichment. */
+export function classifyIdempotencyOutcome(
+  current: IdempotencyRecord,
+  requested: Pick<IdempotencyOutcomeInput, "status" | "updatedAt" | "adapterOrderId">,
+): IdempotencyOutcomeResult {
+  if (!(IDEMPOTENCY_RECORD_STATUSES as readonly string[]).includes(requested.status)) {
+    throw new TypeError("Invalid idempotency outcome status");
+  }
+  unixMs(requested.updatedAt);
+  if (requested.updatedAt < current.updatedAt) throw new RangeError("updatedAt cannot move backwards");
+  if (requested.adapterOrderId !== undefined) identifier(requested.adapterOrderId, "adapterOrderId");
+  if (current.adapterOrderId !== undefined && requested.adapterOrderId !== undefined
+    && current.adapterOrderId !== requested.adapterOrderId) {
+    throw new AdapterOrderIdConflictError("adapterOrderId cannot replace an existing durable identifier");
+  }
+  if (current.status === requested.status) {
+    if (current.status === "OUTCOME_UNKNOWN" && current.adapterOrderId === undefined
+      && requested.adapterOrderId !== undefined) {
+      return Object.freeze({
+        status: "APPLIED_ENRICHMENT",
+        record: createIdempotencyRecord({ ...current, updatedAt: requested.updatedAt,
+          adapterOrderId: requested.adapterOrderId }),
+      });
+    }
+    if (current.adapterOrderId === undefined && requested.adapterOrderId !== undefined) {
+      return Object.freeze({ status: "STATUS_CONFLICT", record: current });
+    }
+    return Object.freeze({ status: "DUPLICATE_SAME", record: current });
+  }
+  if (!LEGAL_OUTCOME_EDGES[current.status].includes(requested.status)) {
+    return Object.freeze({ status: "STATUS_CONFLICT", record: current });
+  }
+  return Object.freeze({
+    status: "APPLIED_TRANSITION",
+    record: createIdempotencyRecord({ ...current, status: requested.status,
+      updatedAt: requested.updatedAt,
+      ...(requested.adapterOrderId === undefined ? {} : { adapterOrderId: requested.adapterOrderId }) }),
+  });
+}
+
 export type IdempotencyClaimComparison =
   | { readonly status: "CLAIMED_NEW" }
   | { readonly status: "EXISTING_SAME_REQUEST" }
@@ -88,7 +147,7 @@ export interface IdempotencyRepository {
   claim(input: IdempotencyClaimInput): Promise<IdempotencyClaimResult>;
   read(adapterId: BrokerAdapterId, idempotencyKey: string): Promise<IdempotencyRecord | undefined>;
   /** MUST reject an update whose environment differs from the originally claimed record. */
-  recordOutcome(input: IdempotencyOutcomeInput): Promise<IdempotencyRecord>;
+  recordOutcome(input: IdempotencyOutcomeInput): Promise<IdempotencyOutcomeResult>;
 }
 
 function identifier(value: unknown, field: string): string {

@@ -12,6 +12,7 @@ import type {
   IdempotencyClaimInput,
   IdempotencyClaimResult,
   IdempotencyOutcomeInput,
+  IdempotencyOutcomeResult,
   IdempotencyRecord,
   IdempotencyRepository,
 } from "./index.js";
@@ -40,7 +41,7 @@ interface FutureRepositoryImplementation {
     adapterId: IdempotencyClaimInput["adapterId"],
     idempotencyKey: string,
   ): Promise<IdempotencyRecord | undefined>;
-  recordOutcome(input: IdempotencyOutcomeInput): Promise<IdempotencyRecord>;
+  recordOutcome(input: IdempotencyOutcomeInput): Promise<IdempotencyOutcomeResult>;
 }
 
 type _FutureAdapterSatisfiesContract = Expect<

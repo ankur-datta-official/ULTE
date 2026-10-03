@@ -9,6 +9,8 @@ import {
   type BrokerAuditOutcome,
   type BrokerFailure,
   type IdempotencyRecord,
+  type IdempotencyOutcomeInput,
+  type IdempotencyRepository,
   type RequestFingerprint,
 } from "@ulte/broker-adapters";
 import type {
@@ -43,6 +45,18 @@ export function snapshotRecord(record: IdempotencyRecord): IdempotencyRecord {
     updatedAt: record.updatedAt,
     ...(record.adapterOrderId === undefined ? {} : { adapterOrderId: record.adapterOrderId }),
   });
+}
+
+/** A competing durable status is never authority for the caller's requested action. */
+export async function persistOutcome(
+  repository: IdempotencyRepository,
+  input: IdempotencyOutcomeInput,
+): Promise<IdempotencyRecord> {
+  const result = await repository.recordOutcome(input);
+  if (result.status === "STATUS_CONFLICT") {
+    throw new Error(`Durable idempotency status conflict: ${result.record.status} -> ${input.status}`);
+  }
+  return result.record;
 }
 
 export function isBrokerFailure(value: unknown): value is BrokerFailure {

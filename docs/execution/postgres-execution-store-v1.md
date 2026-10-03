@@ -39,6 +39,18 @@ changes. Every public broker-adapters status is persisted unchanged. Writing `SU
 adapter I/O and loading it unchanged after restart supports conservative crash recovery. A stored
 adapter order ID may be set once and repeated, but cannot be replaced or removed.
 
+Migration `0002_idempotency_state_machine.sql` adds database enforcement of the public state
+graph, terminal immutability, and the one allowed same-status fact enrichment. It preserves the
+set-once adapter order ID guard from migration 0001. The repository locks the row with `SELECT
+FOR UPDATE`, verifies identity and monotonic time, and uses the broker-adapters pure outcome
+classifier. `DUPLICATE_SAME` and `STATUS_CONFLICT` return the unchanged durable row with no
+`UPDATE`. A legal cross-status transition uses a conditional `UPDATE` predicated on the current
+status. `OUTCOME_UNKNOWN` enrichment uses a separate conditional `UPDATE` predicated on
+`OUTCOME_UNKNOWN` and `adapter_order_id IS NULL`; it stores the new ID and requested `updatedAt`.
+Every zero-row mutation fails closed as `CONCURRENT_OUTCOME_CONFLICT`. A repeated same-status
+delivery with the same or omitted existing ID preserves the original `updatedAt`; a different ID
+raises `ADAPTER_ORDER_ID_CONFLICT`. Terminal rows cannot receive a previously absent ID.
+
 ## Sanitized append-only audit
 
 Audit storage has explicit columns for exactly the public `BrokerAuditEvent` fields. Its identity is

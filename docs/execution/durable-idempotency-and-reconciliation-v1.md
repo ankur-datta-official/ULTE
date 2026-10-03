@@ -42,6 +42,21 @@ Accepted/rejected observations persist their terminal state without submission. 
 observations remain blocked. Only the explicit non-submission observation authorizes a later
 same-key retry; reconciliation itself never submits or creates a new logical key.
 
+The public `recordOutcome` result distinguishes `APPLIED_TRANSITION`, `APPLIED_ENRICHMENT`,
+`DUPLICATE_SAME`, and `STATUS_CONFLICT`; each carries the durable record. A same-status delivery
+with no new durable information is a duplicate and leaves `updatedAt` unchanged. The sole
+authorized same-status enrichment is `OUTCOME_UNKNOWN` with no adapter order ID receiving its
+first valid adapter order ID from a `STILL_UNKNOWN` reconciliation observation. That write stores
+the observation's caller-supplied `updatedAt`. Repeating that observation returns the unchanged
+record and performs no broker submission. A different existing adapter order ID is a conflict.
+`CONFIRMED`, `REJECTED`, and `FAILED_NOT_SUBMITTED` are terminal and cannot receive late facts.
+
+Cross-status changes are limited to `CLAIMED` → `SUBMITTED`, `CONFIRMED`, `REJECTED`,
+`OUTCOME_UNKNOWN`, or `RETRY_AUTHORIZED`; `SUBMITTED` → `CONFIRMED`, `REJECTED`,
+`OUTCOME_UNKNOWN`, `RETRY_AUTHORIZED`, or `FAILED_NOT_SUBMITTED`; `OUTCOME_UNKNOWN` →
+`CONFIRMED`, `REJECTED`, or `RETRY_AUTHORIZED`; and `RETRY_AUTHORIZED` → `SUBMITTED`.
+In particular, `OUTCOME_UNKNOWN` cannot go straight to `SUBMITTED`, regardless of timestamp.
+
 Reconciliation request IDs use versioned, fixed-order, length-prefixed non-secret fields. They use
 no UUID, randomness, or clock and are stable for identical requests even when identifiers contain
 delimiter-like characters.
