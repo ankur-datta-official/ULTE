@@ -1,0 +1,20 @@
+{
+  "name": "@ulte/orchestration-state-store-postgres",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ulte/instrument-model": "workspace:*",
+    "@ulte/orchestration-state-store": "workspace:*"
+  }
+}

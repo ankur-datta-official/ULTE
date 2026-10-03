@@ -80,15 +80,6 @@ importers:
 
   packages/instrument-model: {}
 
-  packages/orchestration-state-store:
-    dependencies:
-      '@ulte/execution-engine':
-        specifier: workspace:*
-        version: link:../execution-engine
-      '@ulte/instrument-model':
-        specifier: workspace:*
-        version: link:../instrument-model
-
   packages/live-market-data-engine:
     dependencies:
       '@ulte/instrument-model':
@@ -195,6 +186,24 @@ importers:
       '@ulte/trade-valuation-engine':
         specifier: workspace:*
         version: link:../trade-valuation-engine
+
+  packages/orchestration-state-store:
+    dependencies:
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+
+  packages/orchestration-state-store-postgres:
+    dependencies:
+      '@ulte/instrument-model':
+        specifier: workspace:*
+        version: link:../instrument-model
+      '@ulte/orchestration-state-store':
+        specifier: workspace:*
+        version: link:../orchestration-state-store
 
   packages/portfolio-risk-engine:
     dependencies:
