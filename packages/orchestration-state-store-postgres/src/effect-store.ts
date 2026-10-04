@@ -159,6 +159,26 @@ export function loadOutcomeInTransaction(transaction: PostgresTransaction,
   const key = orchestrationOutcomeKey(input);
   return infrastructure(() => readOutcome(transaction, key));
 }
+/** Appends through the caller's transaction without authorizing lease or pending state. */
+export function appendOutcomeInTransaction(transaction: PostgresTransaction,
+  input: OrchestrationExternalOutcome): Promise<OrchestrationOutcomeAppendResult> {
+  const outcome = createOrchestrationExternalOutcome(input);
+  return infrastructure(() => appendOutcome(transaction, outcome));
+}
+async function appendOutcome(db: PostgresTransaction,
+  outcome: OrchestrationExternalOutcome): Promise<OrchestrationOutcomeAppendResult> {
+  const inserted = atMostOne(await db.query<OutcomeRow>(OUTCOME_INSERT, outcomeValues(outcome)), "Outcome insert");
+  if (inserted !== null) {
+    const stored = mapOutcomeRow(inserted);
+    if (!sameOutcome(stored, outcome)) throw new PersistenceCorruptionError("Outcome insert returned contradictory facts");
+    return Object.freeze({ status: "APPENDED", outcome: stored });
+  }
+  const existing = await readOutcome(db, outcome.outcomeKey);
+  if (existing === null) throw new PersistenceCorruptionError("Conflicting outcome row disappeared");
+  return sameOutcome(existing, outcome)
+    ? Object.freeze({ status: "DUPLICATE_SAME", outcome: existing })
+    : Object.freeze({ status: "OUTCOME_CONFLICT", existing });
+}
 async function infrastructure<T>(work: () => Promise<T>): Promise<T> {
   try { return await work(); }
   catch (cause) {
@@ -243,18 +263,6 @@ export class PostgresOrchestrationEffectStore {
   }
   public appendOutcome(input: OrchestrationExternalOutcome): Promise<OrchestrationOutcomeAppendResult> {
     const outcome = createOrchestrationExternalOutcome(input);
-    return infrastructure(async () => {
-      const inserted = atMostOne(await this.executor.query<OutcomeRow>(OUTCOME_INSERT, outcomeValues(outcome)), "Outcome insert");
-      if (inserted !== null) {
-        const stored = mapOutcomeRow(inserted);
-        if (!sameOutcome(stored, outcome)) throw new PersistenceCorruptionError("Outcome insert returned contradictory facts");
-        return Object.freeze({ status: "APPENDED", outcome: stored });
-      }
-      const existing = await readOutcome(this.executor, outcome.outcomeKey);
-      if (existing === null) throw new PersistenceCorruptionError("Conflicting outcome row disappeared");
-      return sameOutcome(existing, outcome)
-        ? Object.freeze({ status: "DUPLICATE_SAME", outcome: existing })
-        : Object.freeze({ status: "OUTCOME_CONFLICT", existing });
-    });
+    return infrastructure(() => appendOutcome(this.executor, outcome));
   }
 }

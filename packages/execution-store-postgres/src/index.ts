@@ -6,6 +6,8 @@ export {
 export {
   PostgresIdempotencyRepository,
   createPostgresIdempotencyRepository,
+  claimIdempotencyInTransaction,
+  recordIdempotencyOutcomeInTransaction,
   readIdempotencyInTransaction,
 } from "./idempotency-repository.js";
 export {

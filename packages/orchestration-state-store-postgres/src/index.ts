@@ -5,7 +5,7 @@ export { PostgresOrchestrationRecoveryLeaseStore, assertActiveRecoveryLeaseInTra
 export { PostgresExecutionAuthorityCheckpointStore, appendExecutionAuthorityCheckpointInTransaction,
   loadExecutionAuthorityCheckpointInTransaction } from "./checkpoint-store.js";
 export { PostgresOrchestrationEffectStore, createPendingEffectInTransaction,
-  resolvePendingEffectInTransaction, loadOutcomeInTransaction,
+  resolvePendingEffectInTransaction, loadOutcomeInTransaction, appendOutcomeInTransaction,
   loadPendingEffectForUpdateInTransaction, listUnresolvedEffectsInTransaction,
   listExecutionOutcomesInTransaction } from "./effect-store.js";
 export { PostgresOrchestrationReceiptStore, loadPendingIntentCommitReceiptInTransaction,

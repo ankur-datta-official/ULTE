@@ -7,6 +7,7 @@ import {
   type BrokerAuditEvent,
   type IdempotencyClaimInput,
   type IdempotencyOperation,
+  type IdempotencyOutcomeInput,
   type IdempotencyRecordStatus,
   type RequestFingerprint,
 } from "@ulte/broker-adapters";
@@ -14,9 +15,11 @@ import { unixMs } from "@ulte/instrument-model";
 import {
   PersistenceConflictError,
   PersistenceCorruptionError,
+  claimIdempotencyInTransaction,
   createPostgresBrokerAuditSink,
   createPostgresIdempotencyRepository,
   readIdempotencyInTransaction,
+  recordIdempotencyOutcomeInTransaction,
   type PostgresExecutor,
   type PostgresQueryResult,
   type PostgresTransaction,
@@ -41,12 +44,15 @@ class FakePostgresExecutor implements PostgresExecutor {
   public failNextOutcomeMutation = false;
 
   public async transaction<T>(work: (transaction: PostgresTransaction) => Promise<T>): Promise<T> {
+    const before = new Map(this.idempotency);
     this.calls.push("transaction:start");
     try {
       const result = await work(this);
       this.calls.push("transaction:commit");
       return result;
     } catch (error) {
+      this.idempotency.clear();
+      for (const [key, row] of before) this.idempotency.set(key, row);
       this.calls.push("transaction:rollback");
       throw error;
     }
@@ -524,6 +530,144 @@ describe("PostgresIdempotencyRepository outcomes", () => {
     await expect(
       createPostgresIdempotencyRepository(executor).read(brokerAdapterId("adapter-one"), "key-one"),
     ).rejects.toBeInstanceOf(PersistenceCorruptionError);
+  });
+});
+
+describe("caller-owned idempotency writes", () => {
+  const key = JSON.stringify(["adapter-one", "SANDBOX", "key-one"]);
+  function txFor(db: FakePostgresExecutor): { tx: PostgresTransaction; calls: string[] } {
+    const calls: string[] = [];
+    return { calls, tx: { query: (sql, params) => {
+      calls.push(marker(sql));
+      return db.query(sql, params);
+    } } };
+  }
+  function outcomeInput(overrides: Partial<IdempotencyOutcomeInput> = {}): IdempotencyOutcomeInput {
+    return { adapterId: brokerAdapterId("adapter-one"), environment: "SANDBOX",
+      idempotencyKey: "key-one", requestFingerprint: fingerprint,
+      status: "SUBMITTED", updatedAt: unixMs(101), ...overrides };
+  }
+
+  it("claims through only the supplied transaction and preserves insert-first replay", async () => {
+    const db = new FakePostgresExecutor(), { tx, calls } = txFor(db);
+    const first = await claimIdempotencyInTransaction(tx, claimInput());
+    expect(first).toMatchObject({ status: "CLAIMED_NEW", record: { status: "CLAIMED" } });
+    expect(await claimIdempotencyInTransaction(tx, claimInput()))
+      .toMatchObject({ status: "EXISTING_SAME_REQUEST", record: first.record });
+    expect(calls).toEqual(["claim-insert", "claim-insert", "claim-select-existing"]);
+    expect(db.calls).not.toContain("transaction:start");
+    const publicDb = new FakePostgresExecutor();
+    expect(await createPostgresIdempotencyRepository(publicDb).claim(claimInput())).toEqual(first);
+    expect(publicDb.calls).toEqual(["transaction:start", "query:claim-insert", "transaction:commit"]);
+  });
+
+  it.each([
+    ["environment", { environment: "LIVE" }],
+    ["attempt", { execution_attempt_id: "other" }],
+    ["operation", { operation: "ENTRY_CANCELLATION" }],
+    ["fingerprint", { request_fingerprint: "other" }],
+  ])("classifies a conflicting durable %s on unique-key race", async (_label, change) => {
+    const db = new FakePostgresExecutor(), { tx, calls } = txFor(db);
+    await claimIdempotencyInTransaction(tx, claimInput());
+    db.idempotency.set(key, { ...db.idempotency.get(key)!, ...change });
+    expect(await claimIdempotencyInTransaction(tx, claimInput()))
+      .toMatchObject({ status: "CONFLICT", reason: "IDEMPOTENCY_CONFLICT" });
+    expect(calls.slice(-2)).toEqual(["claim-insert", "claim-select-existing"]);
+  });
+
+  it("rejects malformed claim rows and lets the caller roll back", async () => {
+    const db = new FakePostgresExecutor(), { tx } = txFor(db);
+    await claimIdempotencyInTransaction(tx, claimInput());
+    db.idempotency.set(key, { ...db.idempotency.get(key)!, status: "INVALID" });
+    await expect(claimIdempotencyInTransaction(tx, claimInput()))
+      .rejects.toBeInstanceOf(PersistenceCorruptionError);
+    db.idempotency.clear();
+    await expect(db.transaction(async (ownedTx) => {
+      await claimIdempotencyInTransaction(ownedTx, claimInput());
+      throw new Error("owner rollback");
+    })).rejects.toThrow("owner rollback");
+    expect(db.idempotency.size).toBe(0);
+  });
+
+  it.each(["CONFIRMED", "REJECTED", "OUTCOME_UNKNOWN", "FAILED_NOT_SUBMITTED"] as const)(
+    "transitions SUBMITTED to %s in the caller transaction", async (status) => {
+      const db = new FakePostgresExecutor(), { tx, calls } = txFor(db);
+      await claimIdempotencyInTransaction(tx, claimInput());
+      expect((await recordIdempotencyOutcomeInTransaction(tx, outcomeInput())).status).toBe("APPLIED_TRANSITION");
+      const changed = await recordIdempotencyOutcomeInTransaction(tx,
+        outcomeInput({ status, updatedAt: unixMs(102) }));
+      expect(changed).toMatchObject({ status: "APPLIED_TRANSITION", record: { status } });
+      expect(calls.slice(-2)).toEqual(["outcome-select", "outcome-update"]);
+      expect(db.calls).not.toContain("transaction:start");
+    },
+  );
+
+  it("preserves retry authorization, unknown enrichment, repeat, and illegal transitions", async () => {
+    const db = new FakePostgresExecutor(), { tx, calls } = txFor(db);
+    await claimIdempotencyInTransaction(tx, claimInput());
+    expect((await recordIdempotencyOutcomeInTransaction(tx,
+      outcomeInput({ status: "OUTCOME_UNKNOWN" }))).status).toBe("APPLIED_TRANSITION");
+    expect((await recordIdempotencyOutcomeInTransaction(tx,
+      outcomeInput({ status: "OUTCOME_UNKNOWN", adapterOrderId: "ORDER-1", updatedAt: unixMs(102) })))
+      .status).toBe("APPLIED_ENRICHMENT");
+    const queryCount = calls.length;
+    expect((await recordIdempotencyOutcomeInTransaction(tx,
+      outcomeInput({ status: "OUTCOME_UNKNOWN", adapterOrderId: "ORDER-1", updatedAt: unixMs(103) })))
+      .status).toBe("DUPLICATE_SAME");
+    expect(calls.slice(queryCount)).toEqual(["outcome-select"]);
+    expect((await recordIdempotencyOutcomeInTransaction(tx,
+      outcomeInput({ status: "SUBMITTED", updatedAt: unixMs(103) }))).status).toBe("STATUS_CONFLICT");
+    expect((await recordIdempotencyOutcomeInTransaction(tx,
+      outcomeInput({ status: "RETRY_AUTHORIZED", updatedAt: unixMs(103) }))).status).toBe("APPLIED_TRANSITION");
+    expect((await recordIdempotencyOutcomeInTransaction(tx,
+      outcomeInput({ status: "SUBMITTED", updatedAt: unixMs(104) }))).status).toBe("APPLIED_TRANSITION");
+  });
+
+  it("preserves identity, time, and malformed-row failures on transactional outcomes", async () => {
+    const db = new FakePostgresExecutor(), { tx } = txFor(db);
+    await claimIdempotencyInTransaction(tx, claimInput());
+    for (const change of [{ requestFingerprint: "other" as RequestFingerprint },
+      { executionAttemptId: "other" }, { operation: "ENTRY_CANCELLATION" as IdempotencyOperation }]) {
+      await expect(recordIdempotencyOutcomeInTransaction(tx, outcomeInput(change)))
+        .rejects.toMatchObject({ code: "IMMUTABLE_IDENTITY_CONFLICT" });
+    }
+    await expect(recordIdempotencyOutcomeInTransaction(tx, outcomeInput({ updatedAt: unixMs(99) })))
+      .rejects.toMatchObject({ code: "MONOTONIC_TIME_VIOLATION" });
+    db.idempotency.set(key, { ...db.idempotency.get(key)!, status: "INVALID" });
+    await expect(recordIdempotencyOutcomeInTransaction(tx, outcomeInput()))
+      .rejects.toBeInstanceOf(PersistenceCorruptionError);
+  });
+
+  it("keeps public outcome delegation and caller rollback semantics", async () => {
+    const db = new FakePostgresExecutor(), repository = createPostgresIdempotencyRepository(db);
+    await repository.claim(claimInput());
+    db.calls.length = 0;
+    const result = await repository.recordOutcome(outcomeInput());
+    expect(result).toMatchObject({ status: "APPLIED_TRANSITION", record: { status: "SUBMITTED" } });
+    expect(db.calls).toEqual(["transaction:start", "query:outcome-select", "query:outcome-update", "transaction:commit"]);
+    await expect(db.transaction(async (tx) => {
+      await recordIdempotencyOutcomeInTransaction(tx,
+        outcomeInput({ status: "CONFIRMED", updatedAt: unixMs(102) }));
+      throw new Error("owner rollback");
+    })).rejects.toThrow("owner rollback");
+    expect((await repository.read(brokerAdapterId("adapter-one"), "key-one"))?.status).toBe("SUBMITTED");
+  });
+  it("routes both public writes through the transaction object, never executor.query", async () => {
+    const backing = new FakePostgresExecutor(), routed: string[] = [];
+    const executor: PostgresExecutor = {
+      query: async () => { throw new Error("executor.query forbidden"); },
+      transaction: async (work) => {
+        routed.push("transaction");
+        return work({ query: (sql, params) => {
+          routed.push(marker(sql));
+          return backing.query(sql, params);
+        } });
+      },
+    };
+    const repository = createPostgresIdempotencyRepository(executor);
+    expect((await repository.claim(claimInput())).status).toBe("CLAIMED_NEW");
+    expect((await repository.recordOutcome(outcomeInput())).status).toBe("APPLIED_TRANSITION");
+    expect(routed).toEqual(["transaction", "claim-insert", "transaction", "outcome-select", "outcome-update"]);
   });
 });
 

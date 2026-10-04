@@ -166,8 +166,30 @@ export class PostgresIdempotencyRepository implements IdempotencyRepository {
   public constructor(private readonly executor: PostgresExecutor) {}
 
   public claim(input: IdempotencyClaimInput): Promise<IdempotencyClaimResult> {
-    const candidate = validateClaim(input);
-    return this.executor.transaction(async (transaction) => {
+    validateClaim(input);
+    return this.executor.transaction((transaction) => claimIdempotencyInTransaction(transaction, input));
+  }
+
+  public async read(
+    adapterId: BrokerAdapterId,
+    idempotencyKey: string,
+  ): Promise<IdempotencyRecord | undefined> {
+    return readIdempotencyInTransaction(this.executor, adapterId, idempotencyKey);
+  }
+
+  public recordOutcome(input: OutcomeWithIdentityAssertions): Promise<IdempotencyOutcomeResult> {
+    validateOutcome(input);
+    return this.executor.transaction((transaction) => recordIdempotencyOutcomeInTransaction(transaction, input));
+  }
+}
+
+/** Writes only through the caller's transaction; the caller owns commit and rollback. */
+export function claimIdempotencyInTransaction(
+  transaction: PostgresTransaction,
+  input: IdempotencyClaimInput,
+): Promise<IdempotencyClaimResult> {
+  const candidate = validateClaim(input);
+  return (async () => {
       const inserted = await transaction.query<IdempotencyRow>(CLAIM_INSERT_SQL, [
         candidate.adapterId,
         candidate.environment,
@@ -200,19 +222,16 @@ export class PostgresIdempotencyRepository implements IdempotencyRepository {
         reason: "IDEMPOTENCY_CONFLICT",
         record: existing,
       });
-    });
-  }
+  })();
+}
 
-  public async read(
-    adapterId: BrokerAdapterId,
-    idempotencyKey: string,
-  ): Promise<IdempotencyRecord | undefined> {
-    return readIdempotencyInTransaction(this.executor, adapterId, idempotencyKey);
-  }
-
-  public recordOutcome(input: OutcomeWithIdentityAssertions): Promise<IdempotencyOutcomeResult> {
-    validateOutcome(input);
-    return this.executor.transaction(async (transaction: PostgresTransaction) => {
+/** Writes only through the caller's transaction; the caller owns commit and rollback. */
+export function recordIdempotencyOutcomeInTransaction(
+  transaction: PostgresTransaction,
+  input: OutcomeWithIdentityAssertions,
+): Promise<IdempotencyOutcomeResult> {
+  validateOutcome(input);
+  return (async () => {
       const selected = await transaction.query<IdempotencyRow>(OUTCOME_SELECT_SQL, [
         input.adapterId,
         input.environment,
@@ -277,8 +296,7 @@ export class PostgresIdempotencyRepository implements IdempotencyRepository {
         );
       }
       return Object.freeze({ status: classified.status, record: mapIdempotencyRow(updated.rows[0]!) });
-    });
-  }
+  })();
 }
 
 export function createPostgresIdempotencyRepository(

@@ -6,7 +6,7 @@ import {
   orchestrationFenceToken, orchestrationOutcomeKey, orchestrationRevision, orchestrationSessionId,
 } from "@ulte/orchestration-state-store";
 import {
-  createPendingEffectInTransaction, resolvePendingEffectInTransaction,
+  appendOutcomeInTransaction, createPendingEffectInTransaction, resolvePendingEffectInTransaction,
   listUnresolvedEffectsInTransaction, listExecutionOutcomesInTransaction,
   PersistenceCorruptionError, PostgresOrchestrationEffectStore,
   type PostgresExecutor, type PostgresQueryResult, type PostgresTransaction,
@@ -60,8 +60,9 @@ class FakePostgres implements PostgresExecutor {
   private key(row: Row) { return `${row["adapter_id"]}:${row["idempotency_key"]}`; }
   public async transaction<T>(work: (transaction: PostgresTransaction) => Promise<T>): Promise<T> {
     const before = new Map([...this.pending].map(([key, row]) => [key, { ...row }]));
+    const beforeOutcomes = new Map([...this.outcomes].map(([key, row]) => [key, { ...row }]));
     try { return await work(this); }
-    catch (error) { this.pending = before; throw error; }
+    catch (error) { this.pending = before; this.outcomes = beforeOutcomes; throw error; }
   }
   public async query<T>(sql: string, params: readonly unknown[]): Promise<PostgresQueryResult<T>> {
     this.sql.push(sql);
@@ -281,6 +282,50 @@ describe("pending effects and outcomes", () => {
       throw new Error("rollback");
     })).rejects.toThrow("rollback");
     expect((await store.loadPendingEffect(identity as never))?.state).toBe("PENDING");
+  });
+  it("appends both observation kinds through only the caller query object", async () => {
+    const db = new FakePostgres(), calls: string[] = [];
+    const tx: PostgresTransaction = { query: (sql, params) => {
+      calls.push(/effect:([a-z-]+)/.exec(sql)?.[1] ?? "unknown");
+      return db.query(sql, params);
+    } };
+    const disposition = outcome();
+    const canonical = outcome({ outcomeKey: orchestrationOutcomeKey("canonical"), pendingEffectIdentity: null,
+      observation: { kind: "CANONICAL_EXECUTION_TRANSITION", transition: {
+        kind: "ENTRY_FILL_APPLIED", fill: { executionAttemptId: "attempt-1", adapterOrderId: "order-1",
+          fillId: "fill-1", filledQuantity: "1", fillPrice: "10", filledAt: 100 },
+      } } });
+    expect(await appendOutcomeInTransaction(tx, disposition)).toEqual({ status: "APPENDED", outcome: disposition });
+    expect(await appendOutcomeInTransaction(tx, canonical)).toEqual({ status: "APPENDED", outcome: canonical });
+    expect(calls).toEqual(["outcome-insert", "outcome-insert"]);
+    expect(db.pending.size).toBe(0);
+    expect(mapOutcomeRow(db.outcomes.get("outcome-1") as never)).toEqual(disposition);
+    expect(mapOutcomeRow(db.outcomes.get("canonical") as never)).toEqual(canonical);
+    expect(await new PostgresOrchestrationEffectStore(db).loadOutcome(canonical.outcomeKey)).toEqual(canonical);
+  });
+  it("preserves exact duplicate and immutable conflict results in both entry points", async () => {
+    const db = new FakePostgres(), store = new PostgresOrchestrationEffectStore(db);
+    const tx: PostgresTransaction = { query: (sql, params) => db.query(sql, params) };
+    const value = outcome();
+    expect((await appendOutcomeInTransaction(tx, value)).status).toBe("APPENDED");
+    expect(await store.appendOutcome(value)).toEqual({ status: "DUPLICATE_SAME", outcome: value });
+    const changed = outcome({ observedFence: orchestrationFenceToken(4) });
+    expect(await appendOutcomeInTransaction(tx, changed)).toEqual({ status: "OUTCOME_CONFLICT", existing: value });
+    expect((await store.appendOutcome(changed)).status).toBe("OUTCOME_CONFLICT");
+    expect(db.sql.filter((sql) => /effect:(pending|lease|recovery|checkpoint|receipt)/.test(sql))).toHaveLength(0);
+    expect(db.sql.filter((sql) => /UPDATE/i.test(sql))).toHaveLength(0);
+  });
+  it("fails closed on malformed durable outcome and leaves rollback to the owner", async () => {
+    const db = new FakePostgres();
+    const tx: PostgresTransaction = { query: (sql, params) => db.query(sql, params) };
+    db.outcomes.set("outcome-1", { ...outcomeRow(), observation_payload: [] });
+    await expect(appendOutcomeInTransaction(tx, outcome())).rejects.toBeInstanceOf(PersistenceCorruptionError);
+    db.outcomes.clear();
+    await expect(db.transaction(async (ownedTx) => {
+      await appendOutcomeInTransaction(ownedTx, outcome());
+      throw new Error("owner rollback");
+    })).rejects.toThrow("owner rollback");
+    expect(db.outcomes.size).toBe(0);
   });
   it("migration is additive and constrains the durable model", () => {
     const migration = readFileSync(fileURLToPath(new URL("../migrations/0003_orchestration_pending_effects_and_outcomes.sql", import.meta.url)), "utf8");
