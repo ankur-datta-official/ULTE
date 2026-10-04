@@ -27,6 +27,7 @@
     { "path": "./packages/realtime-trade-r-multiple-engine" },
     { "path": "./packages/live-trading-orchestration-engine" },
     { "path": "./packages/orchestration-state-store" },
+    { "path": "./packages/sandbox-orchestration-recovery" },
     { "path": "./packages/orchestration-state-store-postgres" },
     { "path": "./packages/sandbox-orchestration-runner" },
     { "path": "./packages/realtime-trade-accounting-engine" },

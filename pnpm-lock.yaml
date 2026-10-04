@@ -975,6 +975,15 @@ importers:
         specifier: workspace:*
         version: link:../structure-engine
 
+  packages/sandbox-orchestration-recovery:
+    dependencies:
+      '@ulte/broker-adapters':
+        specifier: workspace:*
+        version: link:../broker-adapters
+      '@ulte/orchestration-state-store':
+        specifier: workspace:*
+        version: link:../orchestration-state-store
+
   packages/sandbox-orchestration-runner:
     dependencies:
       '@ulte/live-market-data-engine':
