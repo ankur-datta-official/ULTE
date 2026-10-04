@@ -66,10 +66,13 @@ export class RealPostgresExecutor implements PostgresExecutor {
 
   public async bind(client: PoolClient): Promise<void> {
     await client.query(`SET search_path TO ${schemaSql(this.#schema)}, pg_catalog`);
-    const result = await client.query<{ active: string; paths: string[] }>(
-      "SELECT current_schema() AS active, current_schemas(false) AS paths");
-    if (result.rows[0]?.active !== this.#schema || result.rows[0].paths[0] !== this.#schema
-      || result.rows[0].paths[1] !== "pg_catalog") {
+    const result = await client.query<{ active_ok: boolean; paths_ok: boolean }>(`
+      SELECT
+        current_schema() = $1::name AS active_ok,
+        current_schemas(false) = ARRAY[$1::name, 'pg_catalog'::name] AS paths_ok
+    `, [this.#schema]);
+    const row = result.rows[0];
+    if (row?.active_ok !== true || row.paths_ok !== true) {
       throw new Error("B1F client search_path verification failed");
     }
   }
