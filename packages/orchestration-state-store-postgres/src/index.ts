@@ -6,10 +6,12 @@ export { PostgresExecutionAuthorityCheckpointStore, appendExecutionAuthorityChec
   loadExecutionAuthorityCheckpointInTransaction } from "./checkpoint-store.js";
 export { PostgresOrchestrationEffectStore, createPendingEffectInTransaction,
   resolvePendingEffectInTransaction, loadOutcomeInTransaction,
-  loadPendingEffectForUpdateInTransaction } from "./effect-store.js";
+  loadPendingEffectForUpdateInTransaction, listUnresolvedEffectsInTransaction,
+  listExecutionOutcomesInTransaction } from "./effect-store.js";
 export { PostgresOrchestrationReceiptStore, loadPendingIntentCommitReceiptInTransaction,
   loadExternalOutcomeAdoptionReceiptInTransaction, appendPendingIntentCommitReceiptInTransaction,
-  appendExternalOutcomeAdoptionReceiptInTransaction } from "./receipt-store.js";
-export type { ReceiptAppendResult } from "./receipt-store.js";
+  appendExternalOutcomeAdoptionReceiptInTransaction,
+  loadAdoptionCreationProofInTransaction } from "./receipt-store.js";
+export type { AdoptionCreationProofLookupResult, ReceiptAppendResult } from "./receipt-store.js";
 export { PersistenceConflictError, PersistenceCorruptionError, PersistenceInfrastructureError } from "./errors.js";
 export type { PostgresExecutor, PostgresQueryResult, PostgresTransaction } from "./postgres.js";

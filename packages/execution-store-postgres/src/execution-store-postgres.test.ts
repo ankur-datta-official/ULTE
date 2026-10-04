@@ -16,6 +16,7 @@ import {
   PersistenceCorruptionError,
   createPostgresBrokerAuditSink,
   createPostgresIdempotencyRepository,
+  readIdempotencyInTransaction,
   type PostgresExecutor,
   type PostgresQueryResult,
   type PostgresTransaction,
@@ -156,6 +157,55 @@ class FakePostgresExecutor implements PostgresExecutor {
 }
 
 const fingerprint = "fingerprint-1" as RequestFingerprint;
+
+describe("transactional idempotency read", () => {
+  const adapterId = brokerAdapterId("adapter-one"), key = "key-one";
+  const durableKey = JSON.stringify([adapterId, "SANDBOX", key]);
+  const row = (status: IdempotencyRecordStatus): StoredRow => ({
+    adapter_id: adapterId, environment: "SANDBOX", idempotency_key: key,
+    execution_attempt_id: "attempt-one", operation: "ENTRY_SUBMISSION",
+    request_fingerprint: fingerprint, status, created_at_ms: "100", updated_at_ms: "101",
+    adapter_order_id: "ORDER-1",
+  });
+
+  it("reads missing and each durable status through the caller query object", async () => {
+    const db = new FakePostgresExecutor();
+    const tx: PostgresTransaction = { query: (sql, params) => db.query(sql, params) };
+    expect(await readIdempotencyInTransaction(tx, adapterId, key)).toBeUndefined();
+    for (const status of ["CLAIMED", "SUBMITTED", "OUTCOME_UNKNOWN", "RETRY_AUTHORIZED",
+      "FAILED_NOT_SUBMITTED"] as const) {
+      db.idempotency.set(durableKey, row(status));
+      const record = await readIdempotencyInTransaction(tx, adapterId, key);
+      expect(record).toMatchObject({ adapterId, environment: "SANDBOX", idempotencyKey: key,
+        status, adapterOrderId: "ORDER-1", createdAt: 100, updatedAt: 101 });
+      expect(await createPostgresIdempotencyRepository(db).read(adapterId, key)).toEqual(record);
+    }
+    expect(db.calls.every((call) => call === "query:read")).toBe(true);
+  });
+
+  it("preserves cross-environment ambiguity and strict malformed-row failures", async () => {
+    const db = new FakePostgresExecutor();
+    const tx: PostgresTransaction = { query: (sql, params) => db.query(sql, params) };
+    db.idempotency.set(durableKey, row("CLAIMED"));
+    db.idempotency.set(JSON.stringify([adapterId, "LIVE", key]), { ...row("CLAIMED"), environment: "LIVE" });
+    await expect(readIdempotencyInTransaction(tx, adapterId, key))
+      .rejects.toMatchObject({ code: "AMBIGUOUS_ENVIRONMENT" });
+    db.idempotency.delete(JSON.stringify([adapterId, "LIVE", key]));
+    for (const change of [{ status: "INVALID" }, { execution_attempt_id: "" }, { environment: "INVALID" }]) {
+      db.idempotency.set(durableKey, { ...row("CLAIMED"), ...change });
+      await expect(readIdempotencyInTransaction(tx, adapterId, key))
+        .rejects.toBeInstanceOf(PersistenceCorruptionError);
+    }
+  });
+
+  it("uses a supplied transaction without reaching a repository executor", async () => {
+    const db = new FakePostgresExecutor();
+    db.idempotency.set(durableKey, row("SUBMITTED"));
+    const tx: PostgresTransaction = { query: (sql, params) => db.query(sql, params) };
+    expect((await readIdempotencyInTransaction(tx, adapterId, key))?.status).toBe("SUBMITTED");
+    expect(db.calls).toEqual(["query:read"]);
+  });
+});
 
 function claimInput(overrides: Partial<IdempotencyClaimInput> = {}): IdempotencyClaimInput {
   return {

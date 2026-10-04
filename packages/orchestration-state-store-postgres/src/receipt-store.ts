@@ -1,7 +1,9 @@
 import {
   createExternalOutcomeAdoptionReceipt, createPendingIntentCommitReceipt,
-  orchestrationOutcomeKey, type ExternalOutcomeAdoptionReceipt,
-  type OrchestrationOutcomeKey, type PendingIntentCommitReceipt,
+  createOrchestrationPendingEffectIdentity, orchestrationOutcomeKey, orchestrationRevision,
+  orchestrationSessionId, type ExternalOutcomeAdoptionReceipt,
+  type OrchestrationOutcomeKey, type OrchestrationPendingEffectIdentity,
+  type OrchestrationRevision, type OrchestrationSessionId, type PendingIntentCommitReceipt,
 } from "@ulte/orchestration-state-store";
 import { loadExecutionAuthorityCheckpointInTransaction } from "./checkpoint-store.js";
 import { loadOutcomeInTransaction } from "./effect-store.js";
@@ -20,6 +22,8 @@ const PENDING_LOAD = `/* receipt:pending-load */ SELECT ${PENDING_COLUMNS}
  FROM orchestration_pending_intent_commit WHERE adapter_id = $1 AND idempotency_key = $2`;
 const ADOPTION_LOAD = `/* receipt:adoption-load */ SELECT ${ADOPTION_COLUMNS}
  FROM orchestration_external_outcome_adoption WHERE outcome_key = $1`;
+const ADOPTION_CREATION_PROOF_LOAD = `/* receipt:adoption-creation-proof-load */ SELECT ${ADOPTION_COLUMNS}
+ FROM orchestration_external_outcome_adoption WHERE session_id = $1 AND adopted_revision = $2`;
 const PENDING_INSERT = `/* receipt:pending-insert */ INSERT INTO orchestration_pending_intent_commit (${PENDING_COLUMNS})
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
  ON CONFLICT (adapter_id, idempotency_key) DO NOTHING RETURNING ${PENDING_COLUMNS}`;
@@ -30,6 +34,10 @@ const ADOPTION_INSERT = `/* receipt:adoption-insert */ INSERT INTO orchestration
 export type ReceiptAppendResult<T> =
   | Readonly<{ readonly status: "APPENDED" | "DUPLICATE_SAME"; readonly receipt: T }>
   | Readonly<{ readonly status: "RECEIPT_CONFLICT"; readonly existing: T }>;
+
+export type AdoptionCreationProofLookupResult =
+  | Readonly<{ readonly status: "MISSING" }>
+  | Readonly<{ readonly status: "FOUND"; readonly receipt: ExternalOutcomeAdoptionReceipt }>;
 
 function atMostOne<Row>(result: PostgresQueryResult<Row>, context: string): Row | null {
   if (result.rowCount !== result.rows.length || result.rows.length > 1 || result.rowCount < 0)
@@ -110,6 +118,36 @@ export function loadExternalOutcomeAdoptionReceiptInTransaction(db: PostgresTran
   outcomeKey: OrchestrationOutcomeKey): Promise<ExternalOutcomeAdoptionReceipt | null> {
   const validKey = orchestrationOutcomeKey(outcomeKey);
   return infrastructure(() => readAdoption(db, validKey));
+}
+
+export function loadAdoptionCreationProofInTransaction(db: PostgresTransaction,
+  sessionIdInput: OrchestrationSessionId, createdRevisionInput: OrchestrationRevision,
+  pendingIdentityInput: Readonly<OrchestrationPendingEffectIdentity>): Promise<AdoptionCreationProofLookupResult> {
+  const sessionId = orchestrationSessionId(sessionIdInput);
+  const createdRevision = orchestrationRevision(createdRevisionInput);
+  const identity = createOrchestrationPendingEffectIdentity(pendingIdentityInput);
+  return infrastructure(async () => {
+    const result = await db.query<AdoptionReceiptRow>(ADOPTION_CREATION_PROOF_LOAD, [sessionId, createdRevision]);
+    const row = atMostOne(result, "Adoption creation proof lookup");
+    if (row === null) return Object.freeze({ status: "MISSING" });
+    const receipt = await adoptionFromRow(db, row);
+    if (receipt.sessionId !== sessionId || receipt.adoptedRevision !== createdRevision)
+      throw new PersistenceCorruptionError("Adoption creation proof durable scope mismatch");
+    const next = receipt.nextPendingEffect, nested = receipt.nextPendingCommit;
+    if (next === null || nested === null || next.createdRevision !== createdRevision
+      || nested.pendingEffect.createdRevision !== createdRevision
+      || !samePendingIdentity(next, identity) || !samePendingIdentity(nested.pendingEffect, identity))
+      return Object.freeze({ status: "MISSING" });
+    return Object.freeze({ status: "FOUND", receipt });
+  });
+}
+
+function samePendingIdentity(effect: OrchestrationPendingEffectIdentity,
+  identity: OrchestrationPendingEffectIdentity): boolean {
+  return effect.adapterId === identity.adapterId && effect.environment === identity.environment
+    && effect.operation === identity.operation && effect.executionAttemptId === identity.executionAttemptId
+    && effect.idempotencyKey === identity.idempotencyKey
+    && effect.requestFingerprint === identity.requestFingerprint;
 }
 
 /** Append only. The caller must own the transaction and compose recovery/pending mutations. */

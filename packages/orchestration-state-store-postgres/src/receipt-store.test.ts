@@ -14,6 +14,7 @@ import {
 import { mapAdoptionReceiptRow, mapPendingReceiptRow } from "./receipt-mapping.js";
 import { appendExternalOutcomeAdoptionReceiptInTransaction, appendPendingIntentCommitReceiptInTransaction,
   loadExternalOutcomeAdoptionReceiptInTransaction, loadPendingIntentCommitReceiptInTransaction,
+  loadAdoptionCreationProofInTransaction,
   PersistenceCorruptionError, PersistenceInfrastructureError, PostgresOrchestrationReceiptStore,
   type PostgresExecutor, type PostgresQueryResult, type PostgresTransaction } from "./index.js";
 
@@ -119,6 +120,7 @@ class FakePostgres implements PostgresExecutor {
   public outcome: Row | null = outcomeRow;
   public pending: Row | null = null;
   public adoption: Row | null = null;
+  public adoptionCandidates: Row[] | null = null;
   public fail = false;
   public impossible = false;
   public calls: { sql: string; params: readonly unknown[] }[] = [];
@@ -138,6 +140,11 @@ class FakePostgres implements PostgresExecutor {
     if (sql.includes("effect:outcome-load")) return result<T>(this.outcome === null ? [] : [this.outcome]);
     if (sql.includes("receipt:pending-load")) return result<T>(this.pending === null ? [] : [this.pending]);
     if (sql.includes("receipt:adoption-load")) return result<T>(this.adoption === null ? [] : [this.adoption]);
+    if (sql.includes("receipt:adoption-creation-proof-load")) {
+      const candidates = this.adoptionCandidates ?? (this.adoption === null ? [] : [this.adoption]);
+      return result<T>(candidates.filter((row) => row["session_id"] === params[0]
+        && row["adopted_revision"] === params[1]));
+    }
     if (sql.includes("receipt:pending-insert") || sql.includes("receipt:adoption-insert")) {
       const pending = sql.includes("receipt:pending-insert");
       if (pending ? this.pending !== null : this.adoption !== null) return result<T>([]);
@@ -192,6 +199,37 @@ describe("PostgreSQL orchestration commit receipts", () => {
     expect((await store.loadExternalOutcomeAdoptionReceipt(fillOutcome.outcomeKey))?.nextPendingCommit)
       .toEqual(withNext.nextPendingCommit);
     expect(db.pending).toBeNull();
+
+    const tx: PostgresTransaction = { query: (sql, params) => db.query(sql, params) };
+    const nextIdentity = { adapterId: nextPending.adapterId, environment: nextPending.environment,
+      operation: nextPending.operation, executionAttemptId: nextPending.executionAttemptId,
+      idempotencyKey: nextPending.idempotencyKey, requestFingerprint: nextPending.requestFingerprint };
+    const lookup = () => loadAdoptionCreationProofInTransaction(tx, "session-1", 4, nextIdentity);
+    expect(await lookup()).toEqual({ status: "FOUND", receipt: withNext });
+    expect(db.calls.slice(-4).map(({ sql }) => sql)).toEqual(expect.arrayContaining([
+      expect.stringContaining("receipt:adoption-creation-proof-load"),
+      expect.stringContaining("effect:outcome-load"),
+    ]));
+    expect(await loadAdoptionCreationProofInTransaction(tx, "session-1", 5, nextIdentity))
+      .toEqual({ status: "MISSING" });
+    for (const changed of [
+      { adapterId: "wrong" }, { environment: "DRY_RUN" }, { operation: "ENTRY_CANCELLATION" },
+      { executionAttemptId: "wrong" }, { idempotencyKey: "wrong" }, { requestFingerprint: "wrong" },
+    ]) expect(await loadAdoptionCreationProofInTransaction(tx, "session-1", 4,
+      { ...nextIdentity, ...changed } as never)).toEqual({ status: "MISSING" });
+    db.adoption = null;
+    expect(await lookup()).toEqual({ status: "MISSING" });
+    db.adoption = receiptRow(adoptionReceipt()); db.outcome = outcomeRow;
+    expect(await loadAdoptionCreationProofInTransaction(tx, "session-1", 3, nextIdentity))
+      .toEqual({ status: "MISSING" });
+    db.adoption = { ...receiptRow(withNext), commit_payload: [] }; db.outcome = {
+      ...outcomeRow, outcome_key: fillOutcome.outcomeKey, pending_adapter_id: null,
+      pending_environment: null, pending_operation: null, pending_execution_attempt_id: null,
+      pending_idempotency_key: null, pending_request_fingerprint: null, observation_payload: filled,
+    };
+    await expect(lookup()).rejects.toBeInstanceOf(PersistenceCorruptionError);
+    db.adoptionCandidates = [receiptRow(withNext), receiptRow(withNext)];
+    await expect(lookup()).rejects.toBeInstanceOf(PersistenceCorruptionError);
   });
 
   it("loads missing, appends and round trips both receipt kinds, including transaction reads", async () => {

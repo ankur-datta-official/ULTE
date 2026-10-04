@@ -6,6 +6,7 @@ export {
 export {
   PostgresIdempotencyRepository,
   createPostgresIdempotencyRepository,
+  readIdempotencyInTransaction,
 } from "./idempotency-repository.js";
 export {
   PostgresBrokerAuditSink,

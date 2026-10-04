@@ -7,6 +7,7 @@ import {
 } from "@ulte/orchestration-state-store";
 import {
   createPendingEffectInTransaction, resolvePendingEffectInTransaction,
+  listUnresolvedEffectsInTransaction, listExecutionOutcomesInTransaction,
   PersistenceCorruptionError, PostgresOrchestrationEffectStore,
   type PostgresExecutor, type PostgresQueryResult, type PostgresTransaction,
 } from "./index.js";
@@ -102,6 +103,59 @@ class FakePostgres implements PostgresExecutor {
 }
 
 describe("pending effects and outcomes", () => {
+  it("reads only unresolved effects for the exact session in durable order through the caller tx", async () => {
+    const db = new FakePostgres();
+    const first = effect({ adapterId: "adapter-a", idempotencyKey: "key-a", createdRevision: 1 });
+    const second = effect({ adapterId: "adapter-b", idempotencyKey: "key-b" });
+    const third = effect({ adapterId: "adapter-a", idempotencyKey: "key-b" });
+    for (const value of [second, third, first]) await createPendingEffectInTransaction(db, value);
+    db.pending.set("adapter-c:key-c", pendingRow(effect({ adapterId: "adapter-c", idempotencyKey: "key-c",
+      sessionId: orchestrationSessionId("other") })));
+    db.pending.set("adapter-d:key-d", pendingRow(effect({ adapterId: "adapter-d", idempotencyKey: "key-d",
+      state: "RESOLVED", resolvedOutcomeKey: orchestrationOutcomeKey("resolved"),
+      resolvedRevision: 3, resolvedFence: 3 })));
+    const tx: PostgresTransaction = { query: (sql, params) => db.query(sql, params) };
+    const selected = await listUnresolvedEffectsInTransaction(tx, sessionId);
+    expect(selected).toEqual([first, third, second]);
+    expect(db.sql.at(-1)).toContain("state = 'PENDING'");
+    expect(db.sql.at(-1)).toContain("ORDER BY created_revision ASC, adapter_id ASC, idempotency_key ASC");
+    expect(await new PostgresOrchestrationEffectStore(db).listUnresolvedEffects(sessionId)).toEqual(selected);
+    db.pending.set("adapter-a:key-a", { ...pendingRow(first), environment: "LIVE" });
+    await expect(listUnresolvedEffectsInTransaction(tx, sessionId)).rejects.toBeInstanceOf(PersistenceCorruptionError);
+  });
+
+  it("reads exact attempt outcomes with both observation kinds and rejects malformed rows", async () => {
+    const db = new FakePostgres(), store = new PostgresOrchestrationEffectStore(db);
+    const disposition = outcome({ outcomeKey: orchestrationOutcomeKey("b"), observedAt: 200 });
+    const canonical = outcome({ outcomeKey: orchestrationOutcomeKey("a"), observedAt: 100,
+      pendingEffectIdentity: null, observation: { kind: "CANONICAL_EXECUTION_TRANSITION", transition: {
+        kind: "ENTRY_FILL_APPLIED", fill: { executionAttemptId: "attempt-1", adapterOrderId: "order-1",
+          fillId: "fill-1", filledQuantity: "1", fillPrice: "10", filledAt: 100 },
+      } } });
+    const otherAttempt = outcome({ outcomeKey: orchestrationOutcomeKey("other-attempt"), executionAttemptId: "attempt-2",
+      pendingEffectIdentity: { ...identity, executionAttemptId: "attempt-2" } });
+    const otherSession = outcome({ outcomeKey: orchestrationOutcomeKey("other-session"),
+      sessionId: orchestrationSessionId("other") });
+    for (const value of [disposition, otherAttempt, canonical, otherSession]) await store.appendOutcome(value);
+    const tx: PostgresTransaction = { query: (sql, params) => db.query(sql, params) };
+    expect(await listExecutionOutcomesInTransaction(tx, sessionId, "attempt-1")).toEqual([canonical, disposition]);
+    expect(await store.listExecutionOutcomes(sessionId, "attempt-1")).toEqual([canonical, disposition]);
+    expect(db.sql.at(-1)).toContain("ORDER BY observed_at_ms ASC, outcome_key ASC");
+    db.outcomes.set("a", { ...outcomeRow(canonical), observation_payload: [] });
+    await expect(listExecutionOutcomesInTransaction(tx, sessionId, "attempt-1"))
+      .rejects.toBeInstanceOf(PersistenceCorruptionError);
+  });
+
+  it("routes transactional effect reads exclusively to the supplied query object", async () => {
+    const db = new FakePostgres();
+    const tx: PostgresTransaction = { query: (sql, params) => db.query(sql, params) };
+    db.pending.set("adapter-1:key-1", pendingRow());
+    db.outcomes.set("outcome-1", outcomeRow());
+    expect(await listUnresolvedEffectsInTransaction(tx, sessionId)).toEqual([effect()]);
+    expect(await listExecutionOutcomesInTransaction(tx, sessionId, "attempt-1")).toEqual([outcome()]);
+    expect(db.sql.slice(-2).map((sql) => /effect:([a-z-]+)/.exec(sql)?.[1]))
+      .toEqual(["pending-list", "outcome-list"]);
+  });
   it("loads missing keys as null and returns NOT_FOUND for missing pending", async () => {
     const db = new FakePostgres(), store = new PostgresOrchestrationEffectStore(db);
     expect(await store.loadPendingEffect(identity as never)).toBeNull();

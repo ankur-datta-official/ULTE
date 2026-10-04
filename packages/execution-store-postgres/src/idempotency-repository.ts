@@ -107,6 +107,21 @@ function oneRow(rows: readonly IdempotencyRow[], context: string): IdempotencyRe
   return mapIdempotencyRow(rows[0]!);
 }
 
+export async function readIdempotencyInTransaction(transaction: PostgresTransaction,
+  adapterId: BrokerAdapterId, idempotencyKey: string): Promise<IdempotencyRecord | undefined> {
+  const validAdapterId = brokerAdapterId(adapterId);
+  const validKey = identifier(idempotencyKey, "idempotencyKey");
+  const result = await transaction.query<IdempotencyRow>(READ_SQL, [validAdapterId, validKey]);
+  if (result.rows.length === 0) return undefined;
+  if (result.rows.length > 1) {
+    throw new PersistenceConflictError(
+      "AMBIGUOUS_ENVIRONMENT",
+      "read(adapterId, idempotencyKey) is ambiguous across execution environments",
+    );
+  }
+  return mapIdempotencyRow(result.rows[0]!);
+}
+
 function sameClaimIdentity(record: IdempotencyRecord, input: IdempotencyClaimInput): boolean {
   return record.adapterId === input.adapterId
     && record.environment === input.environment
@@ -192,17 +207,7 @@ export class PostgresIdempotencyRepository implements IdempotencyRepository {
     adapterId: BrokerAdapterId,
     idempotencyKey: string,
   ): Promise<IdempotencyRecord | undefined> {
-    const validAdapterId = brokerAdapterId(adapterId);
-    const validKey = identifier(idempotencyKey, "idempotencyKey");
-    const result = await this.executor.query<IdempotencyRow>(READ_SQL, [validAdapterId, validKey]);
-    if (result.rows.length === 0) return undefined;
-    if (result.rows.length > 1) {
-      throw new PersistenceConflictError(
-        "AMBIGUOUS_ENVIRONMENT",
-        "read(adapterId, idempotencyKey) is ambiguous across execution environments",
-      );
-    }
-    return mapIdempotencyRow(result.rows[0]!);
+    return readIdempotencyInTransaction(this.executor, adapterId, idempotencyKey);
   }
 
   public recordOutcome(input: OutcomeWithIdentityAssertions): Promise<IdempotencyOutcomeResult> {

@@ -117,6 +117,42 @@ async function readOutcome(db: PostgresTransaction, key: OrchestrationOutcomeKey
   return outcome;
 }
 
+async function readUnresolved(db: PostgresTransaction, sessionId: OrchestrationSessionId):
+  Promise<readonly OrchestrationPendingEffect[]> {
+  const rows = all(await db.query<PendingRow>(PENDING_LIST, [sessionId]), "Unresolved list");
+  return Object.freeze(rows.map((row) => {
+    const effect = mapPendingRow(row);
+    if (effect.sessionId !== sessionId || effect.state !== "PENDING")
+      throw new PersistenceCorruptionError("Unresolved list returned contradictory row");
+    return effect;
+  }));
+}
+
+export function listUnresolvedEffectsInTransaction(transaction: PostgresTransaction,
+  input: OrchestrationSessionId): Promise<readonly OrchestrationPendingEffect[]> {
+  const sessionId = orchestrationSessionId(input);
+  return infrastructure(() => readUnresolved(transaction, sessionId));
+}
+
+async function readExecutionOutcomes(db: PostgresTransaction, sessionId: OrchestrationSessionId,
+  attempt: string): Promise<readonly OrchestrationExternalOutcome[]> {
+  const rows = all(await db.query<OutcomeRow>(OUTCOME_LIST, [sessionId, attempt]), "Outcome list");
+  return Object.freeze(rows.map((row) => {
+    const outcome = mapOutcomeRow(row);
+    if (outcome.sessionId !== sessionId || outcome.executionAttemptId !== attempt)
+      throw new PersistenceCorruptionError("Outcome list returned contradictory row");
+    return outcome;
+  }));
+}
+
+export function listExecutionOutcomesInTransaction(transaction: PostgresTransaction,
+  input: OrchestrationSessionId, executionAttemptId: string): Promise<readonly OrchestrationExternalOutcome[]> {
+  const sessionId = orchestrationSessionId(input);
+  if (typeof executionAttemptId !== "string" || executionAttemptId.length === 0
+    || executionAttemptId.trim() !== executionAttemptId) throw new TypeError("Invalid executionAttemptId");
+  return infrastructure(() => readExecutionOutcomes(transaction, sessionId, executionAttemptId));
+}
+
 /** Reuses the public outcome loader and mapper inside a caller-owned transaction. */
 export function loadOutcomeInTransaction(transaction: PostgresTransaction,
   input: OrchestrationOutcomeKey): Promise<OrchestrationExternalOutcome | null> {
@@ -196,34 +232,14 @@ export class PostgresOrchestrationEffectStore {
     return infrastructure(() => readPending(this.executor, identity, false));
   }
   public listUnresolvedEffects(input: OrchestrationSessionId): Promise<readonly OrchestrationPendingEffect[]> {
-    const sessionId = orchestrationSessionId(input);
-    return infrastructure(async () => {
-      const rows = all(await this.executor.query<PendingRow>(PENDING_LIST, [sessionId]), "Unresolved list");
-      return Object.freeze(rows.map((row) => {
-        const effect = mapPendingRow(row);
-        if (effect.sessionId !== sessionId || effect.state !== "PENDING")
-          throw new PersistenceCorruptionError("Unresolved list returned contradictory row");
-        return effect;
-      }));
-    });
+    return listUnresolvedEffectsInTransaction(this.executor, input);
   }
   public loadOutcome(input: OrchestrationOutcomeKey): Promise<OrchestrationExternalOutcome | null> {
     const key = orchestrationOutcomeKey(input);
     return infrastructure(() => readOutcome(this.executor, key));
   }
   public listExecutionOutcomes(input: OrchestrationSessionId, attempt: string): Promise<readonly OrchestrationExternalOutcome[]> {
-    const sessionId = orchestrationSessionId(input);
-    if (typeof attempt !== "string" || attempt.length === 0 || attempt.trim() !== attempt)
-      throw new TypeError("Invalid executionAttemptId");
-    return infrastructure(async () => {
-      const rows = all(await this.executor.query<OutcomeRow>(OUTCOME_LIST, [sessionId, attempt]), "Outcome list");
-      return Object.freeze(rows.map((row) => {
-        const outcome = mapOutcomeRow(row);
-        if (outcome.sessionId !== sessionId || outcome.executionAttemptId !== attempt)
-          throw new PersistenceCorruptionError("Outcome list returned contradictory row");
-        return outcome;
-      }));
-    });
+    return listExecutionOutcomesInTransaction(this.executor, input, attempt);
   }
   public appendOutcome(input: OrchestrationExternalOutcome): Promise<OrchestrationOutcomeAppendResult> {
     const outcome = createOrchestrationExternalOutcome(input);
