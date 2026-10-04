@@ -112,7 +112,10 @@ async function lockedLease(transaction: PostgresTransaction, sessionId: Orchestr
   return row === null ? null : matchingLease(row, sessionId);
 }
 
-export type ActiveRecoveryLeaseResult = Readonly<{ readonly status: "ACTIVE" | "LEASE_LOST" | "FENCE_CONFLICT" }>;
+export type ActiveRecoveryLeaseResult =
+  | Readonly<{ readonly status: "ACTIVE" }>
+  | Readonly<{ readonly status: "LEASE_LOST" }>
+  | Readonly<{ readonly status: "FENCE_CONFLICT"; readonly currentFence: OrchestrationFenceToken }>;
 
 /** B1E mutation lock order: lease row, recovery row, linked/current pending rows, receipt/adoption rows.
  * Immutable checkpoint/outcome reads need no row locks. A final call while this lease row is still
@@ -134,7 +137,8 @@ export function assertActiveRecoveryLeaseInTransaction(transaction: PostgresTran
     const now = await dbNow(transaction);
     if (lease.ownerId === null || lease.ownerId !== ownerId || lease.expiresAt === null
         || lease.expiresAt <= now) return Object.freeze({ status: "LEASE_LOST" });
-    return Object.freeze({ status: lease.fenceToken === expectedFence ? "ACTIVE" : "FENCE_CONFLICT" });
+    return lease.fenceToken === expectedFence ? Object.freeze({ status: "ACTIVE" })
+      : Object.freeze({ status: "FENCE_CONFLICT", currentFence: lease.fenceToken });
   });
 }
 

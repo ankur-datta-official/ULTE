@@ -80,6 +80,12 @@ async function lockedRecord(transaction: PostgresTransaction, sessionId: Orchest
   return record;
 }
 
+/** Caller holds the lease row first when composing a fenced workflow. */
+export function loadRecoveryStateForUpdateInTransaction(transaction: PostgresTransaction,
+  sessionId: OrchestrationSessionId): Promise<OrchestrationRecoveryRecord | null> {
+  return lockedRecord(transaction, orchestrationSessionId(sessionId));
+}
+
 function saved(rows: readonly RecoveryRow[], sessionId: OrchestrationSessionId, revision: number, fence: number): OrchestrationRecoverySaveResult {
   const record = singleRow(rows, "Recovery mutation");
   if (record.sessionId !== sessionId || record.revision !== revision || record.fenceToken !== fence) {

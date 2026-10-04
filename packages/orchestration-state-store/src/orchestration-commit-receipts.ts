@@ -68,15 +68,16 @@ function copy(value: unknown, ancestors: ReadonlySet<object> = new Set()): unkno
   return Object.freeze(result);
 }
 /** Deep structural equality, independent of object key order and reference identity. */
-function equal(a: unknown, b: unknown): boolean {
+export function equalCanonicalJson(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
   if (typeof a !== "object" || a === null || typeof b !== "object" || b === null) return false;
   if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b)
-    && a.length === b.length && a.every((item, index) => equal(item, b[index]));
+    && a.length === b.length && a.every((item, index) => equalCanonicalJson(item, b[index]));
   const left = Reflect.ownKeys(a), right = Reflect.ownKeys(b);
   return left.length === right.length && left.every((key) => right.includes(key)
-    && equal((a as Record<PropertyKey, unknown>)[key], (b as Record<PropertyKey, unknown>)[key]));
+    && equalCanonicalJson((a as Record<PropertyKey, unknown>)[key], (b as Record<PropertyKey, unknown>)[key]));
 }
+const equal = equalCanonicalJson;
 function checkpoint(value: unknown): ExecutionAuthorityCheckpoint {
   return createExecutionAuthorityCheckpoint(value);
 }
@@ -240,6 +241,16 @@ export interface PendingIntentLogicalPayload {
   readonly resultingRecoveryState: OrchestrationRecoveryState;
   readonly pendingEffect: OrchestrationPendingEffect;
   readonly advanceProof: CheckpointAdvanceProof;
+}
+export interface CommitPendingIntentRequest {
+  readonly sessionId: OrchestrationSessionId;
+  readonly ownerId: OrchestrationLeaseOwnerId;
+  readonly expectedRevision: OrchestrationRevision;
+  readonly expectedFence: OrchestrationFenceToken;
+  readonly previousCheckpointRef: ExecutionAuthorityCheckpointId;
+  readonly committedCheckpoint: ExecutionAuthorityCheckpoint;
+  readonly resultingRecoveryState: OrchestrationRecoveryState;
+  readonly pendingEffect: OrchestrationPendingEffect;
 }
 export interface PendingIntentCommitReceipt extends PendingIntentLogicalPayload {
   readonly schemaVersion: typeof ORCHESTRATION_PENDING_INTENT_COMMIT_RECEIPT_V1;

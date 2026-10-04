@@ -1,5 +1,6 @@
 import {
   createExecutionAuthorityCheckpoint,
+  equalCanonicalJson,
   executionAuthorityCheckpointId,
   type ExecutionAuthorityCheckpoint,
   type ExecutionAuthorityCheckpointAppendResult,
@@ -25,23 +26,9 @@ function atMostOne(result: PostgresQueryResult<CheckpointRow>, operation: string
   return result.rows[0] ?? null;
 }
 
-function sameJson(left: unknown, right: unknown): boolean {
-  if (left === right) return true;
-  if (left === null || right === null || typeof left !== "object" || typeof right !== "object") return false;
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
-      && left.every((item, index) => sameJson(item, right[index]));
-  }
-  const leftKeys = Object.keys(left);
-  const rightRecord = right as Readonly<Record<string, unknown>>;
-  return leftKeys.length === Object.keys(rightRecord).length
-    && leftKeys.every((key) => Object.prototype.hasOwnProperty.call(rightRecord, key)
-      && sameJson((left as Readonly<Record<string, unknown>>)[key], rightRecord[key]));
-}
-
 function sameCheckpoint(left: ExecutionAuthorityCheckpoint, right: ExecutionAuthorityCheckpoint): boolean {
   return left.schemaVersion === right.schemaVersion && left.checkpointRef === right.checkpointRef
-    && sameJson(left.evidence, right.evidence);
+    && equalCanonicalJson(left.evidence, right.evidence);
 }
 
 function values(checkpoint: ExecutionAuthorityCheckpoint): readonly unknown[] {

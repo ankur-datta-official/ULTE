@@ -143,7 +143,7 @@ describe("PostgreSQL recovery lease store", () => {
     expect(await db.transaction((tx) => assertActiveRecoveryLeaseInTransaction(tx, {
       sessionId, ownerId: ownerB, expectedFence: orchestrationFenceToken(1) }))).toEqual({ status: "LEASE_LOST" });
     expect(await db.transaction((tx) => assertActiveRecoveryLeaseInTransaction(tx, {
-      sessionId, ownerId: ownerA, expectedFence: orchestrationFenceToken(2) }))).toEqual({ status: "FENCE_CONFLICT" });
+      sessionId, ownerId: ownerA, expectedFence: orchestrationFenceToken(2) }))).toEqual({ status: "FENCE_CONFLICT", currentFence: 1 });
     db.lease = { ...db.lease, owner_id: null, expires_at_ms: null };
     expect(await check()).toEqual({ status: "LEASE_LOST" });
     expect(db.calls.filter((call) => call === "lease-clock")).toHaveLength(5);
