@@ -16,5 +16,9 @@
   "dependencies": {
     "@ulte/instrument-model": "workspace:*",
     "@ulte/orchestration-state-store": "workspace:*"
+  },
+  "devDependencies": {
+    "@ulte/broker-adapters": "workspace:*",
+    "@ulte/execution-engine": "workspace:*"
   }
 }

@@ -12,6 +12,7 @@ import {
   PersistenceConflictError,
   PersistenceCorruptionError,
   PostgresOrchestrationRecoveryStore,
+  saveRecoveryStateInTransaction,
   type PostgresExecutor,
   type PostgresQueryResult,
   type PostgresTransaction,
@@ -103,6 +104,27 @@ class FakePostgres implements PostgresExecutor {
 }
 
 describe("Postgres orchestration recovery store", () => {
+  it("shares one CAS implementation with caller-owned transactions and rolls back outer failures", async () => {
+    const db = new FakePostgres(), store = new PostgresOrchestrationRecoveryStore(db);
+    await store.initializeRecoveryState(write());
+    await expect(db.transaction(async (tx) => {
+      expect((await saveRecoveryStateInTransaction(tx, write())).status).toBe("SAVED");
+      throw new Error("outer rollback");
+    })).rejects.toThrow("outer rollback");
+    expect(db.row?.["revision"]).toBe(0);
+    expect((await db.transaction((tx) => saveRecoveryStateInTransaction(tx, write()))).status).toBe("SAVED");
+    expect(await db.transaction((tx) => saveRecoveryStateInTransaction(tx, write())))
+      .toEqual({ status: "REVISION_CONFLICT", currentRevision: 1 });
+    expect(await db.transaction((tx) => saveRecoveryStateInTransaction(tx, write(1, 8))))
+      .toEqual({ status: "FENCE_CONFLICT", currentFence: 7 });
+    db.row = null;
+    expect(await db.transaction((tx) => saveRecoveryStateInTransaction(tx, write())))
+      .toEqual({ status: "NOT_FOUND" });
+    const source = readFileSync(fileURLToPath(new URL("./recovery-store.ts", import.meta.url)), "utf8");
+    expect(source.match(/UPDATE orchestration_recovery_state/g)).toHaveLength(1);
+    expect(source).toContain("saveRecoveryStateInTransaction(transaction, write)");
+  });
+
   it("loads missing as null and returns NOT_FOUND on missing save", async () => {
     const db = new FakePostgres();
     const store = new PostgresOrchestrationRecoveryStore(db);

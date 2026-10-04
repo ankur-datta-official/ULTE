@@ -7,6 +7,7 @@ import {
   type OrchestrationFenceToken,
   type OrchestrationFencedLeaseRequest,
   type OrchestrationHeldLease,
+  type OrchestrationLeaseOwnerId,
   type OrchestrationLeaseAcquireResult,
   type OrchestrationLeaseReleaseResult,
   type OrchestrationLeaseRenewResult,
@@ -109,6 +110,32 @@ async function dbNow(transaction: PostgresTransaction): Promise<UnixMs> {
 async function lockedLease(transaction: PostgresTransaction, sessionId: OrchestrationSessionId): Promise<MappedLeaseRow | null> {
   const row = atMostOne(await transaction.query<LeaseRow>(LOCK_SQL, [sessionId]), "Lease lock");
   return row === null ? null : matchingLease(row, sessionId);
+}
+
+export type ActiveRecoveryLeaseResult = Readonly<{ readonly status: "ACTIVE" | "LEASE_LOST" | "FENCE_CONFLICT" }>;
+
+/** B1E mutation lock order: lease row, recovery row, linked/current pending rows, receipt/adoption rows.
+ * Immutable checkpoint/outcome reads need no row locks. A final call while this lease row is still
+ * locked is the future authorization linearization point; it uses a fresh database clock reading.
+ * If this succeeds but recovery CAS reports FENCE_CONFLICT, the durable rows are incoherent and the
+ * composed workflow must report corruption. Standalone recovery save retains its existing result.
+ */
+export function assertActiveRecoveryLeaseInTransaction(transaction: PostgresTransaction, request: {
+  readonly sessionId: OrchestrationSessionId;
+  readonly ownerId: OrchestrationLeaseOwnerId;
+  readonly expectedFence: OrchestrationFenceToken;
+}): Promise<ActiveRecoveryLeaseResult> {
+  const sessionId = orchestrationSessionId(request.sessionId);
+  const ownerId = orchestrationLeaseOwnerId(request.ownerId);
+  const expectedFence = orchestrationFenceToken(request.expectedFence);
+  return infrastructure(async () => {
+    const lease = await lockedLease(transaction, sessionId);
+    if (lease === null) return Object.freeze({ status: "LEASE_LOST" });
+    const now = await dbNow(transaction);
+    if (lease.ownerId === null || lease.ownerId !== ownerId || lease.expiresAt === null
+        || lease.expiresAt <= now) return Object.freeze({ status: "LEASE_LOST" });
+    return Object.freeze({ status: lease.fenceToken === expectedFence ? "ACTIVE" : "FENCE_CONFLICT" });
+  });
 }
 
 async function lockedStateFence(transaction: PostgresTransaction, sessionId: OrchestrationSessionId): Promise<OrchestrationFenceToken | null> {

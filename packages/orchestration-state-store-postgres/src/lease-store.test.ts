@@ -6,6 +6,7 @@ import {
   orchestrationSessionId,
 } from "@ulte/orchestration-state-store";
 import {
+  assertActiveRecoveryLeaseInTransaction,
   PersistenceConflictError, PersistenceCorruptionError, PersistenceInfrastructureError,
   PostgresOrchestrationRecoveryLeaseStore,
   type PostgresExecutor, type PostgresQueryResult, type PostgresTransaction,
@@ -125,6 +126,29 @@ function store(db: FakePostgres): PostgresOrchestrationRecoveryLeaseStore {
 }
 
 describe("PostgreSQL recovery lease store", () => {
+  it("asserts the locked lease with a fresh database clock on each call", async () => {
+    const db = new FakePostgres();
+    const check = () => db.transaction((tx) => assertActiveRecoveryLeaseInTransaction(tx, {
+      sessionId, ownerId: ownerA, expectedFence: orchestrationFenceToken(1) }));
+    expect(await check()).toEqual({ status: "LEASE_LOST" });
+    db.lease = { session_id: sessionId, owner_id: ownerA, fence_token: "1", expires_at_ms: "1100" };
+    await db.transaction(async (tx) => {
+      expect(await assertActiveRecoveryLeaseInTransaction(tx, {
+        sessionId, ownerId: ownerA, expectedFence: orchestrationFenceToken(1) })).toEqual({ status: "ACTIVE" });
+      db.now = 1_100;
+      expect(await assertActiveRecoveryLeaseInTransaction(tx, {
+        sessionId, ownerId: ownerA, expectedFence: orchestrationFenceToken(1) })).toEqual({ status: "LEASE_LOST" });
+    });
+    db.now = 1_000;
+    expect(await db.transaction((tx) => assertActiveRecoveryLeaseInTransaction(tx, {
+      sessionId, ownerId: ownerB, expectedFence: orchestrationFenceToken(1) }))).toEqual({ status: "LEASE_LOST" });
+    expect(await db.transaction((tx) => assertActiveRecoveryLeaseInTransaction(tx, {
+      sessionId, ownerId: ownerA, expectedFence: orchestrationFenceToken(2) }))).toEqual({ status: "FENCE_CONFLICT" });
+    db.lease = { ...db.lease, owner_id: null, expires_at_ms: null };
+    expect(await check()).toEqual({ status: "LEASE_LOST" });
+    expect(db.calls.filter((call) => call === "lease-clock")).toHaveLength(5);
+  });
+
   it("acquires the first lease at fence one using DB time and leaves input unchanged", async () => {
     const db = new FakePostgres();
     const original = structuredClone(request);

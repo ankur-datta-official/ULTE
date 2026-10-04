@@ -210,6 +210,13 @@ importers:
       '@ulte/orchestration-state-store':
         specifier: workspace:*
         version: link:../orchestration-state-store
+    devDependencies:
+      '@ulte/broker-adapters':
+        specifier: workspace:*
+        version: link:../broker-adapters
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
 
   packages/portfolio-risk-engine:
     dependencies:

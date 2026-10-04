@@ -110,6 +110,13 @@ async function readOutcome(db: PostgresTransaction, key: OrchestrationOutcomeKey
   if (outcome.outcomeKey !== key) throw new PersistenceCorruptionError("Outcome durable key mismatch");
   return outcome;
 }
+
+/** Reuses the public outcome loader and mapper inside a caller-owned transaction. */
+export function loadOutcomeInTransaction(transaction: PostgresTransaction,
+  input: OrchestrationOutcomeKey): Promise<OrchestrationExternalOutcome | null> {
+  const key = orchestrationOutcomeKey(input);
+  return infrastructure(() => readOutcome(transaction, key));
+}
 async function infrastructure<T>(work: () => Promise<T>): Promise<T> {
   try { return await work(); }
   catch (cause) {

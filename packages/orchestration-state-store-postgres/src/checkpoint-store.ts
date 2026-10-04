@@ -68,6 +68,14 @@ async function readCheckpoint(db: PostgresTransaction, ref: ExecutionAuthorityCh
   return checkpoint;
 }
 
+/** Reuses the public loader's strict row mapping inside a caller-owned transaction. */
+export function loadExecutionAuthorityCheckpointInTransaction(
+  transaction: PostgresTransaction, ref: ExecutionAuthorityCheckpointId,
+): Promise<ExecutionAuthorityCheckpoint | null> {
+  const checkpointRef = executionAuthorityCheckpointId(ref);
+  return infrastructure(() => readCheckpoint(transaction, checkpointRef));
+}
+
 async function append(db: PostgresTransaction, checkpoint: ExecutionAuthorityCheckpoint): Promise<ExecutionAuthorityCheckpointAppendResult> {
   const row = atMostOne(await db.query<CheckpointRow>(INSERT_SQL, values(checkpoint)), "Checkpoint insert");
   if (row !== null) {

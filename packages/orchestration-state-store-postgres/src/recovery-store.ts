@@ -72,6 +72,8 @@ function singleRow(rows: readonly RecoveryRow[], context: string): Orchestration
 
 async function lockedRecord(transaction: PostgresTransaction, sessionId: OrchestrationSessionId): Promise<OrchestrationRecoveryRecord | null> {
   const selected = await transaction.query<RecoveryRow>(LOCK_SQL, [sessionId]);
+  if (selected.rowCount !== selected.rows.length || selected.rows.length > 1 || selected.rowCount < 0)
+    throw new PersistenceCorruptionError("Locked recovery lookup returned an impossible row count");
   if (selected.rows.length === 0) return null;
   const record = singleRow(selected.rows, "Locked recovery lookup");
   if (record.sessionId !== sessionId) throw new PersistenceCorruptionError("Locked recovery session mismatch");
@@ -115,28 +117,34 @@ export class PostgresOrchestrationRecoveryStore implements OrchestrationRecovery
   }
 
   public saveRecoveryState(write: OrchestrationRecoveryWrite): Promise<OrchestrationRecoverySaveResult> {
-    const candidate = validatedWrite(write);
-    return this.executor.transaction(async (transaction) => {
-      const current = await lockedRecord(transaction, candidate.sessionId);
-      if (current === null) return Object.freeze({ status: "NOT_FOUND" });
-      if (current.fenceToken !== candidate.fenceToken) {
-        return Object.freeze({ status: "FENCE_CONFLICT", currentFence: current.fenceToken });
-      }
-      if (current.revision !== candidate.revision) {
-        return Object.freeze({ status: "REVISION_CONFLICT", currentRevision: current.revision });
-      }
-      if (candidate.revision === Number.MAX_SAFE_INTEGER) {
-        throw new PersistenceConflictError("REVISION_OVERFLOW", "Recovery revision cannot exceed MAX_SAFE_INTEGER");
-      }
-      const nextRevision = candidate.revision + 1;
-      const updated = await transaction.query<RecoveryRow>(UPDATE_SQL, [
-        candidate.sessionId, candidate.revision, candidate.fenceToken, nextRevision,
-        ...values(candidate).slice(4),
-      ]);
-      if (updated.rows.length !== 1) {
-        throw new PersistenceConflictError("CONCURRENT_RECOVERY_CONFLICT", "Conditional recovery update returned no single row");
-      }
-      return saved(updated.rows, candidate.sessionId, nextRevision, candidate.fenceToken);
-    });
+    return this.executor.transaction((transaction) => saveRecoveryStateInTransaction(transaction, write));
   }
+}
+
+/** Caller must acquire the lease row before this recovery row in a composed B1E mutation. */
+export async function saveRecoveryStateInTransaction(transaction: PostgresTransaction,
+  write: OrchestrationRecoveryWrite): Promise<OrchestrationRecoverySaveResult> {
+  const candidate = validatedWrite(write);
+  const current = await lockedRecord(transaction, candidate.sessionId);
+  if (current === null) return Object.freeze({ status: "NOT_FOUND" });
+  if (current.fenceToken !== candidate.fenceToken) {
+    return Object.freeze({ status: "FENCE_CONFLICT", currentFence: current.fenceToken });
+  }
+  if (current.revision !== candidate.revision) {
+    return Object.freeze({ status: "REVISION_CONFLICT", currentRevision: current.revision });
+  }
+  if (candidate.revision === Number.MAX_SAFE_INTEGER) {
+    throw new PersistenceConflictError("REVISION_OVERFLOW", "Recovery revision cannot exceed MAX_SAFE_INTEGER");
+  }
+  const nextRevision = candidate.revision + 1;
+  const updated = await transaction.query<RecoveryRow>(UPDATE_SQL, [
+    candidate.sessionId, candidate.revision, candidate.fenceToken, nextRevision,
+    ...values(candidate).slice(4),
+  ]);
+  if (updated.rowCount !== updated.rows.length || updated.rows.length > 1 || updated.rowCount < 0)
+    throw new PersistenceCorruptionError("Conditional recovery update returned an impossible row count");
+  if (updated.rows.length !== 1) {
+    throw new PersistenceConflictError("CONCURRENT_RECOVERY_CONFLICT", "Conditional recovery update returned no single row");
+  }
+  return saved(updated.rows, candidate.sessionId, nextRevision, candidate.fenceToken);
 }
