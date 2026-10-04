@@ -1,5 +1,6 @@
 import {
   createExternalOutcomeAdoptionReceipt, createPendingIntentCommitReceipt,
+  executionAuthorityCheckpointId,
   equivalentOutcomeAdoptionRetry, equivalentPendingIntentRetry,
   proveExecutionCheckpointAdvance, proveOutcomeAdoptionCheckpointAdvance,
   provePendingIntentCheckpointAdvance,
@@ -39,14 +40,57 @@ orchestrationSessionId("session");
 orchestrationRevision(1);
 orchestrationFenceToken(1);
 orchestrationLeaseOwnerId("owner");
-if (pendingResult.status === "COMMITTED" || pendingResult.status === "ALREADY_COMMITTED") {
-  pendingResult.receipt satisfies PendingIntentCommitReceipt;
+function impossible(value: never): never { throw new Error(`Unexpected result: ${String(value)}`); }
+function checkPending(value: PendingIntentTransactionResult): void {
+  switch (value.status) {
+    case "COMMITTED": case "ALREADY_COMMITTED": value.receipt satisfies PendingIntentCommitReceipt; break;
+    case "REVISION_CONFLICT": value.currentRevision satisfies typeof pendingReceipt.expectedRevision; break;
+    case "FENCE_CONFLICT": value.currentFence satisfies typeof pendingReceipt.committedFence | null; break;
+    case "CHECKPOINT_CONFLICT": value.checkpointRef satisfies typeof before.checkpointRef; break;
+    case "PRIOR_CHECKPOINT_CONFLICT":
+      value.requestedPreviousCheckpointRef satisfies typeof before.checkpointRef;
+      value.currentCheckpointRef satisfies typeof before.checkpointRef | null;
+      break;
+    case "LEASE_LOST": case "NOT_FOUND": case "EFFECT_CONFLICT": break;
+    default: impossible(value);
+  }
 }
-if (adoptionResult.status === "ADOPTED" || adoptionResult.status === "ALREADY_ADOPTED") {
-  adoptionResult.receipt satisfies ExternalOutcomeAdoptionReceipt;
+function checkAdoption(value: OutcomeAdoptionTransactionResult): void {
+  switch (value.status) {
+    case "ADOPTED": case "ALREADY_ADOPTED": value.receipt satisfies ExternalOutcomeAdoptionReceipt; break;
+    case "REVISION_CONFLICT": value.currentRevision satisfies typeof adoptionReceipt.expectedRevision; break;
+    case "FENCE_CONFLICT": value.currentFence satisfies typeof adoptionReceipt.adoptedFence | null; break;
+    case "CHECKPOINT_CONFLICT": value.checkpointRef satisfies typeof before.checkpointRef; break;
+    case "PRIOR_CHECKPOINT_CONFLICT":
+      value.requestedPreviousCheckpointRef satisfies typeof before.checkpointRef;
+      value.currentCheckpointRef satisfies typeof before.checkpointRef | null;
+      break;
+    case "LEASE_LOST": case "NOT_FOUND": case "OUTCOME_NOT_FOUND": case "OUTCOME_NOT_ADOPTABLE":
+    case "EFFECT_CONFLICT": case "ADOPTION_CONFLICT": break;
+    default: impossible(value);
+  }
 }
+const checkpointRef = executionAuthorityCheckpointId("checkpoint");
+const pendingCollision: PendingIntentTransactionResult = { status: "CHECKPOINT_CONFLICT", checkpointRef };
+const adoptionPrior: OutcomeAdoptionTransactionResult = {
+  status: "PRIOR_CHECKPOINT_CONFLICT", requestedPreviousCheckpointRef: checkpointRef, currentCheckpointRef: null,
+};
+// @ts-expect-error Raw strings are not branded checkpoint references.
+const unbrandedConflict: PendingIntentTransactionResult = { status: "CHECKPOINT_CONFLICT", checkpointRef: "raw" };
+const unrelatedField: OutcomeAdoptionTransactionResult = {
+  status: "PRIOR_CHECKPOINT_CONFLICT", requestedPreviousCheckpointRef: checkpointRef, currentCheckpointRef: null,
+  // @ts-expect-error A prior-checkpoint conflict has no revision payload.
+  currentRevision: orchestrationRevision(1),
+};
+const unrelatedCheckpointField: PendingIntentTransactionResult = {
+  status: "CHECKPOINT_CONFLICT", checkpointRef,
+  // @ts-expect-error A checkpoint binding conflict has no prior-authority payload.
+  currentCheckpointRef: null,
+};
 // @ts-expect-error Raw strings have not passed the session ID constructor.
 const invalidSession: PendingIntentLogicalPayload["sessionId"] = "session";
 // @ts-expect-error A broker disposition has no canonical transition proof.
 const invalidProof: CheckpointAdvanceProof = adoptionProof;
-void proof; void invalidSession; void invalidProof;
+void proof; void invalidSession; void invalidProof; void pendingResult; void adoptionResult;
+void checkPending; void checkAdoption; void pendingCollision; void adoptionPrior;
+void unbrandedConflict; void unrelatedField; void unrelatedCheckpointField;

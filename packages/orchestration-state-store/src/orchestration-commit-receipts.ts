@@ -378,14 +378,29 @@ export function equivalentOutcomeAdoptionRetry(receipt: ExternalOutcomeAdoptionR
   return fields.every((field) => equal(receipt[field], logical[field]));
 }
 
+/** Fresh mutation precedence: lease, locked recovery existence/revision, lease/recovery fence
+ * coherence, caller prior checkpoint, then immutable committed-checkpoint binding. An exact
+ * existing receipt is checked before current lease/recovery authorization on an unknown-COMMIT retry.
+ * CHECKPOINT_CONFLICT means one immutable checkpoint key has different canonical evidence.
+ * PRIOR_CHECKPOINT_CONFLICT means coherent current recovery authority differs from the caller's prior ref.
+ * Missing or internally contradictory durable authority remains corruption, not a typed conflict.
+ */
+type CheckpointTransactionConflict =
+  | Readonly<{ readonly status: "CHECKPOINT_CONFLICT"; readonly checkpointRef: ExecutionAuthorityCheckpointId }>
+  | Readonly<{ readonly status: "PRIOR_CHECKPOINT_CONFLICT";
+    readonly requestedPreviousCheckpointRef: ExecutionAuthorityCheckpointId;
+    readonly currentCheckpointRef: ExecutionAuthorityCheckpointId | null }>;
+
 export type PendingIntentTransactionResult =
   | Readonly<{ readonly status: "COMMITTED" | "ALREADY_COMMITTED"; readonly receipt: PendingIntentCommitReceipt }>
   | Readonly<{ readonly status: "REVISION_CONFLICT"; readonly currentRevision: OrchestrationRevision }>
   | Readonly<{ readonly status: "FENCE_CONFLICT"; readonly currentFence: OrchestrationFenceToken | null }>
-  | Readonly<{ readonly status: "LEASE_LOST" | "NOT_FOUND" | "EFFECT_CONFLICT" }>;
+  | Readonly<{ readonly status: "LEASE_LOST" | "NOT_FOUND" | "EFFECT_CONFLICT" }>
+  | CheckpointTransactionConflict;
 export type OutcomeAdoptionTransactionResult =
   | Readonly<{ readonly status: "ADOPTED" | "ALREADY_ADOPTED"; readonly receipt: ExternalOutcomeAdoptionReceipt }>
   | Readonly<{ readonly status: "REVISION_CONFLICT"; readonly currentRevision: OrchestrationRevision }>
   | Readonly<{ readonly status: "FENCE_CONFLICT"; readonly currentFence: OrchestrationFenceToken | null }>
   | Readonly<{ readonly status: "LEASE_LOST" | "NOT_FOUND" | "OUTCOME_NOT_FOUND" | "OUTCOME_NOT_ADOPTABLE"
-    | "EFFECT_CONFLICT" | "ADOPTION_CONFLICT" }>;
+    | "EFFECT_CONFLICT" | "ADOPTION_CONFLICT" }>
+  | CheckpointTransactionConflict;

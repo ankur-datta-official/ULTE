@@ -7,12 +7,14 @@ import { checkpointEvidence } from "../../../tests/integration/phase33b-checkpoi
 import {
   createExecutionAuthorityCheckpoint, createExternalOutcomeAdoptionReceipt,
   createOrchestrationExternalOutcome, createOrchestrationPendingEffect, createPendingIntentCommitReceipt,
+  executionAuthorityCheckpointId,
   equivalentOutcomeAdoptionRetry, equivalentPendingIntentRetry,
   proveExecutionCheckpointAdvance, proveOutcomeAdoptionCheckpointAdvance,
   provePendingIntentCheckpointAdvance,
   ORCHESTRATION_EXTERNAL_OUTCOME_ADOPTION_RECEIPT_V1,
   ORCHESTRATION_EXTERNAL_OUTCOME_SCHEMA_VERSION, ORCHESTRATION_PENDING_EFFECT_SCHEMA_VERSION,
   ORCHESTRATION_PENDING_INTENT_COMMIT_RECEIPT_V1,
+  type OutcomeAdoptionTransactionResult, type PendingIntentTransactionResult,
 } from "./index.js";
 
 const capabilities = {
@@ -108,6 +110,22 @@ function proven(value: typeof ack, previous = p1, committed = p2) {
 }
 
 describe("B1E immutable checkpoint advance and commit contracts", () => {
+  it("represents distinct checkpoint binding and caller prior-authority conflicts for both workflows", () => {
+    const checkpointRef = executionAuthorityCheckpointId("committed");
+    const previousRef = executionAuthorityCheckpointId("previous");
+    const currentRef = executionAuthorityCheckpointId("current");
+    const pendingCollision: PendingIntentTransactionResult = { status: "CHECKPOINT_CONFLICT", checkpointRef };
+    const adoptionCollision: OutcomeAdoptionTransactionResult = { status: "CHECKPOINT_CONFLICT", checkpointRef };
+    const pendingPrior: PendingIntentTransactionResult = { status: "PRIOR_CHECKPOINT_CONFLICT",
+      requestedPreviousCheckpointRef: previousRef, currentCheckpointRef: currentRef };
+    const adoptionPrior: OutcomeAdoptionTransactionResult = { status: "PRIOR_CHECKPOINT_CONFLICT",
+      requestedPreviousCheckpointRef: previousRef, currentCheckpointRef: null };
+    expect(pendingCollision).toEqual({ status: "CHECKPOINT_CONFLICT", checkpointRef });
+    expect(adoptionCollision).toEqual(pendingCollision);
+    expect(pendingPrior).toEqual({ status: "PRIOR_CHECKPOINT_CONFLICT",
+      requestedPreviousCheckpointRef: previousRef, currentCheckpointRef: currentRef });
+    expect(adoptionPrior.currentCheckpointRef).toBeNull();
+  });
   it("proves exact prefix and rejects rewrite, removal, insertion, initialization and identity changes", () => {
     expect(proveExecutionCheckpointAdvance({ previousCheckpoint: p0, committedCheckpoint: p1,
       allowedSuffix: [entryTransition] }).transitionKinds).toEqual(["ENTRY_SUBMISSION_REQUESTED"]);
