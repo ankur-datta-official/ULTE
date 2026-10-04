@@ -1,6 +1,10 @@
 export { PostgresOrchestrationRecoveryStore, saveRecoveryStateInTransaction,
   loadRecoveryStateForUpdateInTransaction } from "./recovery-store.js";
 export { PostgresOrchestrationCommitService } from "./commit-service.js";
+export { PostgresOrchestrationFencedWriterService } from "./fenced-writer-service.js";
+export type { PendingWriterAuthority, PendingWriterFailure, PendingWriterResult,
+  PendingClaimRequest, PendingStatusRequest, PendingOutcomeRequest,
+  PendingTerminalRequest, PendingReconciliationRequest } from "./fenced-writer-service.js";
 export { PostgresOrchestrationRecoveryLeaseStore, assertActiveRecoveryLeaseInTransaction } from "./lease-store.js";
 export { PostgresExecutionAuthorityCheckpointStore, appendExecutionAuthorityCheckpointInTransaction,
   loadExecutionAuthorityCheckpointInTransaction } from "./checkpoint-store.js";

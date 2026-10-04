@@ -213,6 +213,9 @@ importers:
 
   packages/orchestration-state-store-postgres:
     dependencies:
+      '@ulte/execution-store-postgres':
+        specifier: workspace:*
+        version: link:../execution-store-postgres
       '@ulte/instrument-model':
         specifier: workspace:*
         version: link:../instrument-model
