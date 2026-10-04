@@ -6,6 +6,7 @@ import { requestEntryCancellation, requestEntrySubmission, requestProtection,
 import { checkpointEvidence } from "../../../tests/integration/phase33b-checkpoint-fixture.js";
 import {
   createExecutionAuthorityCheckpoint, createExternalOutcomeAdoptionReceipt,
+  createOrchestrationRecoveryRecord, createOutcomeAdoptionRecoveryState,
   createOrchestrationExternalOutcome, createOrchestrationPendingEffect, createPendingIntentCommitReceipt,
   executionAuthorityCheckpointId,
   equivalentOutcomeAdoptionRetry, equivalentPendingIntentRetry,
@@ -110,6 +111,72 @@ function proven(value: typeof ack, previous = p1, committed = p2) {
 }
 
 describe("B1E immutable checkpoint advance and commit contracts", () => {
+  it("advances only execution authority while preserving null latest-R and risk references", () => {
+    const current = createOrchestrationRecoveryRecord({
+      schemaVersion: "ORCHESTRATION_RECOVERY_RECORD_V1", sessionId: "session-1",
+      revision: 1, fenceToken: 3, ...recovery("p1"),
+    });
+    const target = createOutcomeAdoptionRecoveryState({ currentRecovery: current, committedCheckpoint: p2 });
+    expect(target).toEqual({
+      mode: current.mode, instrumentId: current.instrumentId,
+      executionAuthorityCheckpointRef: p2.checkpointRef,
+      executionAuthorityIdentity: p2.evidence.identity,
+      riskBasisCheckpointRef: current.riskBasisCheckpointRef,
+      latestROutcomeRef: null,
+    });
+    expect(target.executionAuthorityCheckpointRef).not.toBe(current.executionAuthorityCheckpointRef);
+    expect(Object.isFrozen(target)).toBe(true);
+    expect(Object.isFrozen(target.executionAuthorityIdentity)).toBe(true);
+  });
+  it("preserves non-null latest-R and risk basis across acknowledgement, rejection, fill, and next pending", () => {
+    const currentData = {
+      schemaVersion: "ORCHESTRATION_RECOVERY_RECORD_V1", sessionId: "session-1",
+      revision: 1, fenceToken: 3, ...recovery("p1"),
+      riskBasisCheckpointRef: "risk-1", latestROutcomeRef: "r-1",
+    };
+    const current = createOrchestrationRecoveryRecord(currentData);
+    const rejectedTransition = { kind: "ENTRY_SUBMISSION_REJECTED", rejection: {
+      executionAttemptId: base.identity.executionAttemptId, idempotencyKey: entry.request.idempotencyKey,
+      adapterReasonCode: "declined", rejectedAt: 2_100_101 } } as const;
+    const checkpoints = [p2, cp("rejected", [entryTransition, rejectedTransition]), p3,
+      cp("with-next-pending", [entryTransition, ackTransition, fillTransition, protectionTransition])];
+    const originalData = { ...currentData };
+    for (const committedCheckpoint of checkpoints) {
+      const target = createOutcomeAdoptionRecoveryState({ currentRecovery: current, committedCheckpoint });
+      expect(target).toEqual({ mode: current.mode, instrumentId: current.instrumentId,
+        executionAuthorityCheckpointRef: committedCheckpoint.checkpointRef,
+        executionAuthorityIdentity: committedCheckpoint.evidence.identity,
+        riskBasisCheckpointRef: current.riskBasisCheckpointRef,
+        latestROutcomeRef: current.latestROutcomeRef });
+      expect(Object.isFrozen(target)).toBe(true);
+      expect(Object.isFrozen(target.executionAuthorityIdentity)).toBe(true);
+    }
+    expect(currentData).toEqual(originalData);
+    expect(current.executionAuthorityCheckpointRef).toBe(executionAuthorityCheckpointId("p1"));
+    expect(current.latestROutcomeRef).toBe("r-1");
+    expect(p2.checkpointRef).toBe(executionAuthorityCheckpointId("p2"));
+  });
+  it("rejects mismatched instruments, invalid current recovery, and reference update options", () => {
+    const otherInstrument = createOrchestrationRecoveryRecord({
+      schemaVersion: "ORCHESTRATION_RECOVERY_RECORD_V1", sessionId: "session-1",
+      revision: 1, fenceToken: 3, mode: "SANDBOX",
+      instrumentId: `${base.identity.instrumentId.slice(0, -1)}${base.identity.instrumentId.endsWith("X") ? "Y" : "X"}`,
+      executionAuthorityCheckpointRef: null, executionAuthorityIdentity: null,
+      riskBasisCheckpointRef: null, latestROutcomeRef: null,
+    });
+    expect(() => createOutcomeAdoptionRecoveryState({ currentRecovery: otherInstrument,
+      committedCheckpoint: p2 })).toThrow(TypeError);
+    const current = createOrchestrationRecoveryRecord({
+      schemaVersion: "ORCHESTRATION_RECOVERY_RECORD_V1", sessionId: "session-1",
+      revision: 1, fenceToken: 3, ...recovery("p1"),
+    });
+    expect(() => createOutcomeAdoptionRecoveryState({ currentRecovery: {
+      ...current, latestROutcomeRef: "r-1" } as never, committedCheckpoint: p2 })).toThrow(TypeError);
+    expect(() => createOutcomeAdoptionRecoveryState({ currentRecovery: current,
+      committedCheckpoint: p2, nextLatestROutcomeRef: "r-2" } as never)).toThrow(TypeError);
+    expect(() => createOutcomeAdoptionRecoveryState({ currentRecovery: current,
+      committedCheckpoint: p2, riskBasisUpdate: "risk-2" } as never)).toThrow(TypeError);
+  });
   it("represents distinct checkpoint binding and caller prior-authority conflicts for both workflows", () => {
     const checkpointRef = executionAuthorityCheckpointId("committed");
     const previousRef = executionAuthorityCheckpointId("previous");

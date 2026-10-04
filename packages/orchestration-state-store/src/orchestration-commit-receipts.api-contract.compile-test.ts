@@ -1,5 +1,6 @@
 import {
-  createExternalOutcomeAdoptionReceipt, createPendingIntentCommitReceipt,
+  createExternalOutcomeAdoptionReceipt, createOutcomeAdoptionRecoveryState,
+  createPendingIntentCommitReceipt,
   executionAuthorityCheckpointId,
   equivalentOutcomeAdoptionRetry, equivalentPendingIntentRetry,
   proveExecutionCheckpointAdvance, proveOutcomeAdoptionCheckpointAdvance,
@@ -7,6 +8,7 @@ import {
   orchestrationFenceToken, orchestrationLeaseOwnerId, orchestrationRevision, orchestrationSessionId,
   type AdoptionLogicalPayload, type CheckpointAdvanceProof, type ExecutionAuthorityCheckpoint,
   type ExternalOutcomeAdoptionReceipt, type OrchestrationExternalOutcome,
+  type OrchestrationRecoveryRecord, type OrchestrationRecoveryState,
   type OrchestrationPendingEffect, type OutcomeAdoptionTransactionResult,
   type PendingIntentCommitReceipt, type PendingIntentLogicalPayload,
   type PendingIntentTransactionResult,
@@ -22,6 +24,15 @@ declare const pendingLogical: PendingIntentLogicalPayload;
 declare const adoptionLogical: AdoptionLogicalPayload;
 declare const pendingResult: PendingIntentTransactionResult;
 declare const adoptionResult: OutcomeAdoptionTransactionResult;
+declare const currentRecovery: OrchestrationRecoveryRecord;
+
+const adoptedRecovery: OrchestrationRecoveryState = createOutcomeAdoptionRecoveryState({
+  currentRecovery, committedCheckpoint: after,
+});
+// @ts-expect-error Adoption has no caller-controlled latest-R update option.
+createOutcomeAdoptionRecoveryState({ currentRecovery, committedCheckpoint: after, nextLatestROutcomeRef: null });
+// @ts-expect-error Adoption has no caller-controlled risk-basis update option.
+createOutcomeAdoptionRecoveryState({ currentRecovery, committedCheckpoint: after, riskBasisUpdate: null });
 
 const proof: CheckpointAdvanceProof = proveExecutionCheckpointAdvance({
   previousCheckpoint: before, committedCheckpoint: after, allowedSuffix: after.evidence.transitions,
@@ -91,6 +102,6 @@ const unrelatedCheckpointField: PendingIntentTransactionResult = {
 const invalidSession: PendingIntentLogicalPayload["sessionId"] = "session";
 // @ts-expect-error A broker disposition has no canonical transition proof.
 const invalidProof: CheckpointAdvanceProof = adoptionProof;
-void proof; void invalidSession; void invalidProof; void pendingResult; void adoptionResult;
+void proof; void adoptedRecovery; void invalidSession; void invalidProof; void pendingResult; void adoptionResult;
 void checkPending; void checkAdoption; void pendingCollision; void adoptionPrior;
 void unbrandedConflict; void unrelatedField; void unrelatedCheckpointField;

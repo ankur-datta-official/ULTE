@@ -19,7 +19,7 @@ import {
   orchestrationFenceToken, orchestrationLeaseOwnerId, orchestrationRevision,
   orchestrationSessionId, ORCHESTRATION_RECOVERY_RECORD_SCHEMA_VERSION,
   type ExecutionAuthorityCheckpointId, type OrchestrationFenceToken,
-  type OrchestrationLeaseOwnerId, type OrchestrationRecoveryState,
+  type OrchestrationLeaseOwnerId, type OrchestrationRecoveryRecord, type OrchestrationRecoveryState,
   type OrchestrationRevision, type OrchestrationSessionId,
 } from "./recovery-store.js";
 
@@ -198,6 +198,32 @@ export function proveOutcomeAdoptionCheckpointAdvance(input: {
     if (!equal(regenerated, restored(committed))) throw new TypeError("Next pending authority mismatch");
   }
   return Object.freeze({ status: "PROVEN", proof });
+}
+
+/** Outcome adoption consumes canonical execution lifecycle evidence. It creates neither risk-basis
+ * nor latest-R authority: both references remain session-stable across this transaction. A dedicated
+ * risk/R evidence workflow may update them under its own proof contract; recovery references grant no authority.
+ */
+export function createOutcomeAdoptionRecoveryState(input: {
+  readonly currentRecovery: OrchestrationRecoveryRecord;
+  readonly committedCheckpoint: ExecutionAuthorityCheckpoint;
+}): OrchestrationRecoveryState {
+  if (!exact(input, ["currentRecovery", "committedCheckpoint"])) {
+    throw new TypeError("Invalid outcome adoption recovery input");
+  }
+  const current = createOrchestrationRecoveryRecord(input.currentRecovery);
+  const committed = createExecutionAuthorityCheckpoint(input.committedCheckpoint);
+  if (committed.evidence.identity.instrumentId !== current.instrumentId) {
+    throw new TypeError("Outcome adoption instrument mismatch");
+  }
+  return Object.freeze({
+    mode: current.mode,
+    instrumentId: current.instrumentId,
+    executionAuthorityCheckpointRef: committed.checkpointRef,
+    executionAuthorityIdentity: committed.evidence.identity,
+    riskBasisCheckpointRef: current.riskBasisCheckpointRef,
+    latestROutcomeRef: current.latestROutcomeRef,
+  });
 }
 
 function state(value: unknown, sessionId: OrchestrationSessionId, revision: OrchestrationRevision,
