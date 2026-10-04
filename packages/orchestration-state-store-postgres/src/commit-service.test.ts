@@ -4,8 +4,9 @@ import { brokerAdapterId, fingerprintEntryCancellation, fingerprintEntrySubmissi
 import { requestEntryCancellation, requestEntrySubmission, requestProtection,
   restoreExecutionAttemptFromEvidence, type ExecutionAttemptRecoveryTransition } from "@ulte/execution-engine";
 import { checkpointEvidence } from "../../../tests/integration/phase33b-checkpoint-fixture.js";
-import { createExecutionAuthorityCheckpoint, createOrchestrationPendingEffect,
-  type CommitPendingIntentRequest, type PendingIntentCommitReceipt } from "@ulte/orchestration-state-store";
+import { createExecutionAuthorityCheckpoint, createOrchestrationExternalOutcome,
+  createOrchestrationPendingEffect, type AdoptOutcomeRequest, type CommitPendingIntentRequest,
+  type OrchestrationExternalOutcome, type PendingIntentCommitReceipt } from "@ulte/orchestration-state-store";
 import { PersistenceConflictError, PersistenceCorruptionError, PersistenceInfrastructureError,
   PostgresOrchestrationCommitService, type PostgresExecutor, type PostgresQueryResult,
   type PostgresTransaction } from "./index.js";
@@ -93,6 +94,21 @@ const pendingFields = ["schema_version", "session_id", "adapter_id", "environmen
 const receiptFields = ["schema_version", "adapter_id", "idempotency_key", "session_id", "expected_revision",
   "committed_revision", "committed_fence", "committing_owner_id", "previous_checkpoint_ref",
   "committed_checkpoint_ref", "commit_payload"];
+const adoptionFields = ["schema_version", "outcome_key", "session_id", "execution_attempt_id",
+  "expected_revision", "adopted_revision", "adopted_fence", "adopting_owner_id",
+  "previous_checkpoint_ref", "committed_checkpoint_ref", "commit_payload"];
+const outcomeFields = ["schema_version", "outcome_key", "session_id", "execution_attempt_id",
+  "observed_at_ms", "observed_fence", "pending_adapter_id", "pending_environment", "pending_operation",
+  "pending_execution_attempt_id", "pending_idempotency_key", "pending_request_fingerprint",
+  "observation_kind", "observation_payload"];
+function outcomeRow(value: OrchestrationExternalOutcome): Row {
+  const pending = value.pendingEffectIdentity;
+  return row(outcomeFields, [value.schemaVersion, value.outcomeKey, value.sessionId, value.executionAttemptId,
+    String(value.observedAt), String(value.observedFence), pending?.adapterId ?? null,
+    pending?.environment ?? null, pending?.operation ?? null, pending?.executionAttemptId ?? null,
+    pending?.idempotencyKey ?? null, pending?.requestFingerprint ?? null, value.observation.kind,
+    value.observation.kind === "BROKER_DISPOSITION" ? value.observation.disposition : value.observation.transition]);
+}
 function row(fields: readonly string[], params: readonly unknown[], jsonField?: string): Row {
   return Object.fromEntries(fields.map((field, index) => [field,
     field === jsonField ? JSON.parse(String(params[index])) : params[index]]));
@@ -104,7 +120,12 @@ class FakePostgres implements PostgresExecutor {
   public checkpoints = new Map<string, Row>();
   public recovery: Row | null;
   public pending: Row | null = null;
+  public nextPending: Row | null = null;
   public receipt: Row | null = null;
+  public adoptionReceipt: Row | null = null;
+  public adoptionReceiptOnInsert: Row | null = null;
+  public adoptionReceiptOnRecheck: Row | null = null;
+  public outcome: Row | null = null;
   public receiptOnInsert: Row | null = null;
   public receiptOnRecheck: Row | null = null;
   public pendingOnInsert: Row | null = null;
@@ -119,6 +140,7 @@ class FakePostgres implements PostgresExecutor {
   private clocks = 0;
   private leaseLocks = 0;
   private receiptReads = 0;
+  private adoptionReceiptReads = 0;
   public constructor(previous: ReturnType<typeof checkpoint>) {
     this.checkpoints.set(previous.checkpointRef, checkpointRow(previous));
     this.recovery = recoveryRow(previous.checkpointRef);
@@ -126,11 +148,13 @@ class FakePostgres implements PostgresExecutor {
   public async transaction<T>(work: (tx: PostgresTransaction) => Promise<T>): Promise<T> {
     this.transactions += 1;
     const before = { checkpoints: new Map(this.checkpoints), recovery: this.recovery && { ...this.recovery },
-      pending: this.pending && { ...this.pending }, receipt: this.receipt && { ...this.receipt } };
+      pending: this.pending && { ...this.pending }, nextPending: this.nextPending && { ...this.nextPending },
+      receipt: this.receipt && { ...this.receipt }, adoptionReceipt: this.adoptionReceipt && { ...this.adoptionReceipt } };
     try { const value = await work(this); this.calls.push("commit"); return value; }
     catch (cause) {
       this.checkpoints = before.checkpoints; this.recovery = before.recovery;
-      this.pending = before.pending; this.receipt = before.receipt;
+      this.pending = before.pending; this.nextPending = before.nextPending;
+      this.receipt = before.receipt; this.adoptionReceipt = before.adoptionReceipt;
       this.calls.push("rollback"); throw cause;
     }
   }
@@ -144,6 +168,14 @@ class FakePostgres implements PostgresExecutor {
       if (this.receiptReads === 2 && this.receiptOnRecheck) this.receipt = this.receiptOnRecheck;
       return result<T>(this.receipt ? [this.receipt] : []);
     }
+    if (name === "receipt:adoption-load") {
+      this.adoptionReceiptReads += 1;
+      if (this.adoptionReceiptReads === 2 && this.adoptionReceiptOnRecheck) {
+        this.adoptionReceipt = this.adoptionReceiptOnRecheck;
+      }
+      return result<T>(this.adoptionReceipt ? [this.adoptionReceipt] : []);
+    }
+    if (name === "effect:outcome-load") return result<T>(this.outcome ? [this.outcome] : []);
     if (name === "lease-lock") {
       this.leaseLocks += 1;
       if (this.leaseLocks === 2 && this.changeFenceAtFinal && this.lease) {
@@ -167,11 +199,27 @@ class FakePostgres implements PostgresExecutor {
       this.checkpoints.set(String(params[1]), value); return result<T>([value]);
     }
     if (name === "effect:pending-insert") {
-      if (this.pendingOnInsert) { this.pending = this.pendingOnInsert; return result<T>([]); }
-      if (this.conflictAt === name || this.pending) return result<T>([]);
-      this.pending = row(pendingFields, params); return result<T>([this.pending]);
+      if (this.pendingOnInsert) {
+        if (this.pending && this.pending["idempotency_key"] !== params[6]) this.nextPending = this.pendingOnInsert;
+        else this.pending = this.pendingOnInsert;
+        return result<T>([]);
+      }
+      const target = this.pending && this.pending["idempotency_key"] !== params[6] ? "nextPending" : "pending";
+      if (this.conflictAt === name || this[target]) return result<T>([]);
+      this[target] = row(pendingFields, params); return result<T>([this[target]!]);
     }
-    if (name === "effect:pending-load") return result<T>(this.pending ? [this.pending] : []);
+    if (name === "effect:pending-load") {
+      const found = [this.pending, this.nextPending].find((item) => item
+        && item["adapter_id"] === params[0] && item["idempotency_key"] === params[1]);
+      return result<T>(found ? [found] : []);
+    }
+    if (name === "effect:pending-resolve") {
+      if (this.conflictAt === name) return result<T>([]);
+      if (!this.pending || this.pending["idempotency_key"] !== params[1]) return result<T>([]);
+      this.pending = { ...this.pending, state: "RESOLVED", resolved_outcome_key: params[2],
+        resolved_revision: String(params[3]), resolved_fence: String(params[4]) };
+      return result<T>([this.pending]);
+    }
     if (name === "save-update") {
       if (this.conflictAt === name) return result<T>([]);
       if (!this.recovery) return result<T>([]);
@@ -185,6 +233,14 @@ class FakePostgres implements PostgresExecutor {
       if (this.receiptOnInsert) { this.receipt = this.receiptOnInsert; return result<T>([]); }
       if (this.conflictAt === name || this.receipt) return result<T>([]);
       this.receipt = row(receiptFields, params, "commit_payload"); return result<T>([this.receipt]);
+    }
+    if (name === "receipt:adoption-insert") {
+      if (this.adoptionReceiptOnInsert) {
+        this.adoptionReceipt = this.adoptionReceiptOnInsert; return result<T>([]);
+      }
+      if (this.conflictAt === name || this.adoptionReceipt) return result<T>([]);
+      this.adoptionReceipt = row(adoptionFields, params, "commit_payload");
+      return result<T>([this.adoptionReceipt]);
     }
     throw new Error(`Unexpected SQL ${name}`);
   }
@@ -406,5 +462,349 @@ describe("atomic pending-intent commit", () => {
       expectedRevision: Number.MAX_SAFE_INTEGER as typeof request.expectedRevision }))
       .rejects.toMatchObject({ code: "REVISION_OVERFLOW" } satisfies Partial<PersistenceConflictError>);
     expect(db.transactions).toBe(0); expect(db.calls).toEqual([]);
+  });
+});
+
+const rejected = { kind: "ENTRY_SUBMISSION_REJECTED", rejection: {
+  executionAttemptId: base.identity.executionAttemptId, idempotencyKey: entry.request.idempotencyKey,
+  adapterReasonCode: "declined", rejectedAt: 2_100_101 } } as const;
+
+function adoptionFixture(kind: "ack" | "rejection" | "fill" | "fill-next" = "ack") {
+  const transition = kind === "ack" ? acknowledged : kind === "rejection" ? rejected : filled;
+  const previous = kind === "ack" || kind === "rejection" ? entryAfter : cancellationBefore;
+  const suffix = kind === "fill-next" ? [filled, { kind: "PROTECTION_REQUESTED" as const }] : [transition];
+  const committed = checkpoint(`adopt-${kind}`, [...previous.evidence.transitions, ...suffix]);
+  const linked = kind === "ack" || kind === "rejection";
+  const pending = linked ? fixture().request.pendingEffect : null;
+  const outcome = createOrchestrationExternalOutcome({
+    schemaVersion: "ORCHESTRATION_EXTERNAL_OUTCOME_V1", outcomeKey: `outcome-${kind}`,
+    sessionId: "session-1", executionAttemptId: base.identity.executionAttemptId,
+    observedAt: 2_100_101, observedFence: 3,
+    pendingEffectIdentity: pending === null ? null : {
+      adapterId: pending.adapterId, environment: pending.environment, operation: pending.operation,
+      executionAttemptId: pending.executionAttemptId, idempotencyKey: pending.idempotencyKey,
+      requestFingerprint: pending.requestFingerprint },
+    observation: { kind: "CANONICAL_EXECUTION_TRANSITION", transition },
+  });
+  const nextPendingEffectIdentity = kind === "fill-next" ? {
+    adapterId: brokerAdapterId("adapter-1"), environment: "SANDBOX" as const,
+    operation: "PROTECTION_SUBMISSION" as const, executionAttemptId: base.identity.executionAttemptId,
+    idempotencyKey: protection.request.idempotencyKey,
+    requestFingerprint: fingerprintProtectionRequest(protection.request),
+  } : null;
+  const request: AdoptOutcomeRequest = {
+    sessionId: outcome.sessionId, ownerId: "owner-1" as AdoptOutcomeRequest["ownerId"],
+    expectedRevision: 1 as AdoptOutcomeRequest["expectedRevision"],
+    expectedFence: 3 as AdoptOutcomeRequest["expectedFence"],
+    previousCheckpointRef: previous.checkpointRef, outcomeKey: outcome.outcomeKey,
+    committedCheckpoint: committed,
+    resultingRecoveryState: { mode: "SANDBOX", instrumentId: base.identity.instrumentId,
+      executionAuthorityCheckpointRef: committed.checkpointRef, executionAuthorityIdentity: base.identity,
+      riskBasisCheckpointRef: "risk-1" as never, latestROutcomeRef: "r-1" as never },
+    nextPendingEffectIdentity,
+  };
+  const db = new FakePostgres(previous);
+  db.outcome = outcomeRow(outcome);
+  if (pending) db.pending = row(pendingFields, [pending.schemaVersion, pending.sessionId,
+    pending.adapterId, pending.environment, pending.operation, pending.executionAttemptId,
+    pending.idempotencyKey, pending.requestFingerprint, "1", "3", "PENDING", null, null, null]);
+  db.recovery = { ...db.recovery, risk_basis_checkpoint_ref: "risk-1", latest_r_outcome_ref: "r-1" };
+  return { db, request, previous, outcome };
+}
+
+describe("atomic outcome adoption", () => {
+  for (const kind of ["ack", "rejection", "fill", "fill-next"] as const) {
+    it(`adopts ${kind} and its exact durable witness`, async () => {
+      const { db, request } = adoptionFixture(kind);
+      const answer = await new PostgresOrchestrationCommitService(db).adoptOutcome(request);
+      expect(answer.status).toBe("ADOPTED");
+      if (answer.status !== "ADOPTED") return;
+      expect(db.checkpoints.has(request.committedCheckpoint.checkpointRef)).toBe(true);
+      expect(db.recovery?.["revision"]).toBe("2");
+      expect(db.recovery?.["execution_authority_checkpoint_ref"]).toBe(request.committedCheckpoint.checkpointRef);
+      expect(db.recovery?.["risk_basis_checkpoint_ref"]).toBe("risk-1");
+      expect(db.recovery?.["latest_r_outcome_ref"]).toBe("r-1");
+      expect(db.adoptionReceipt).not.toBeNull();
+      expect(db.receipt).toBeNull();
+      expect(db.pending?.["state"]).toBe(kind === "ack" || kind === "rejection" ? "RESOLVED"
+        : kind === "fill-next" ? "PENDING" : undefined);
+      expect(db.nextPending?.["state"] ?? (kind === "fill-next" ? db.pending?.["state"] : undefined))
+        .toBe(kind === "fill-next" ? "PENDING" : undefined);
+      expect(answer.receipt.nextPendingCommit === null).toBe(kind !== "fill-next");
+      expect(answer.receipt.advanceProof.transitionKinds).toEqual(kind === "fill-next"
+        ? ["ENTRY_FILL_APPLIED", "PROTECTION_REQUESTED"] : [kind === "ack"
+          ? "ENTRY_SUBMISSION_ACKNOWLEDGED" : kind === "rejection"
+            ? "ENTRY_SUBMISSION_REJECTED" : "ENTRY_FILL_APPLIED"]);
+      expect(db.transactions).toBe(1);
+      expect(db.calls.indexOf("receipt:adoption-load")).toBeLessThan(db.calls.indexOf("lease-lock"));
+      expect(db.calls.indexOf("effect:outcome-load")).toBeLessThan(db.calls.indexOf("lease-lock"));
+      expect(db.calls.indexOf("lease-lock")).toBeLessThan(db.calls.indexOf("select-for-update"));
+      expect(db.calls.indexOf("receipt:adoption-insert")).toBeLessThan(db.calls.lastIndexOf("lease-clock"));
+      expect(db.calls.filter((call) => call === "lease-clock")).toHaveLength(2);
+    });
+  }
+
+  it("retries from the historical receipt after ownership, fence and mutable state advance", async () => {
+    const { db, request } = adoptionFixture("ack");
+    const service = new PostgresOrchestrationCommitService(db);
+    const first = await service.adoptOutcome(request);
+    expect(first.status).toBe("ADOPTED");
+    db.lease = null;
+    db.recovery = { ...db.recovery, revision: "9" };
+    db.calls = [];
+    const retry = await service.adoptOutcome({ ...request, ownerId: "other" as never,
+      expectedFence: 99 as never });
+    expect(retry).toEqual({ status: "ALREADY_ADOPTED", receipt: (first as { receipt: unknown }).receipt });
+    expect(db.calls).not.toContain("lease-lock");
+    expect(db.calls).not.toContain("checkpoint:insert");
+    expect(db.calls).not.toContain("save-update");
+    expect(db.calls).not.toContain("effect:pending-load");
+    expect(db.transactions).toBe(2);
+    expect(await service.adoptOutcome({ ...request, resultingRecoveryState: {
+      ...request.resultingRecoveryState, mode: "DRY_RUN" } })).toEqual({ status: "ADOPTION_CONFLICT" });
+    const contradictory = createExecutionAuthorityCheckpoint({ ...request.committedCheckpoint,
+      evidence: { ...request.committedCheckpoint.evidence, transitions: [requested, { ...acknowledged,
+        acknowledgement: { ...acknowledged.acknowledgement, adapterOrderId: "different" } }] } });
+    expect(await service.adoptOutcome({ ...request, committedCheckpoint: contradictory }))
+      .toEqual({ status: "CHECKPOINT_CONFLICT", checkpointRef: request.committedCheckpoint.checkpointRef });
+  });
+
+  it("classifies missing and disposition outcomes before lease authorization", async () => {
+    const missing = adoptionFixture(); missing.db.outcome = null; missing.db.lease = null;
+    expect(await new PostgresOrchestrationCommitService(missing.db).adoptOutcome(missing.request))
+      .toEqual({ status: "OUTCOME_NOT_FOUND" });
+    const disposition = adoptionFixture(); disposition.db.lease = null;
+    disposition.db.outcome = outcomeRow(createOrchestrationExternalOutcome({ ...disposition.outcome,
+      observation: { kind: "BROKER_DISPOSITION", disposition: { status: "STILL_UNKNOWN" } } }));
+    expect(await new PostgresOrchestrationCommitService(disposition.db).adoptOutcome(disposition.request))
+      .toEqual({ status: "OUTCOME_NOT_ADOPTABLE" });
+    expect(disposition.db.calls).not.toContain("lease-lock");
+    expect(disposition.db.checkpoints.size).toBe(1);
+  });
+
+  it("classifies lease, recovery and prior authority before mutation", async () => {
+    const cases: { change: (db: FakePostgres) => void; status: string }[] = [
+      { change: (db) => { db.lease = null; }, status: "LEASE_LOST" },
+      { change: (db) => { db.lease = { ...db.lease, owner_id: null, expires_at_ms: null }; }, status: "LEASE_LOST" },
+      { change: (db) => { db.lease = { ...db.lease, expires_at_ms: "1000" }; }, status: "LEASE_LOST" },
+      { change: (db) => { db.lease = { ...db.lease, owner_id: "other" }; }, status: "LEASE_LOST" },
+      { change: (db) => { db.lease = { ...db.lease, fence_token: "4" }; }, status: "FENCE_CONFLICT" },
+      { change: (db) => { db.recovery = null; }, status: "NOT_FOUND" },
+      { change: (db) => { db.recovery = { ...db.recovery, revision: "2" }; }, status: "REVISION_CONFLICT" },
+      { change: (db) => { db.checkpoints.set("other", checkpointRow(checkpoint("other", [requested])));
+        db.recovery = { ...db.recovery, execution_authority_checkpoint_ref: "other" }; }, status: "PRIOR_CHECKPOINT_CONFLICT" },
+    ];
+    for (const { change, status } of cases) {
+      const { db, request } = adoptionFixture(); change(db);
+      const answer = await new PostgresOrchestrationCommitService(db).adoptOutcome(request);
+      expect(answer.status).toBe(status);
+      expect(db.calls).not.toContain("checkpoint:insert");
+      expect(db.transactions).toBe(1);
+    }
+  });
+
+  it("rejects contradictory durable authority, linked state and recovery delta", async () => {
+    for (const change of [
+      (db: FakePostgres) => { db.checkpoints.clear(); },
+      (db: FakePostgres) => { db.recovery = { ...db.recovery, execution_attempt_id: "wrong" }; },
+      (db: FakePostgres) => { db.recovery = { ...db.recovery, fence_token: "4" }; },
+      (db: FakePostgres) => { db.pending = null; },
+      (db: FakePostgres) => { db.pending = { ...db.pending, state: "RESOLVED",
+        resolved_outcome_key: "outcome-ack", resolved_revision: "2", resolved_fence: "3" }; },
+      (db: FakePostgres) => { db.pending = { ...db.pending, request_fingerprint: "different" }; },
+    ]) {
+      const { db, request } = adoptionFixture(); change(db);
+      await expect(new PostgresOrchestrationCommitService(db).adoptOutcome(request))
+        .rejects.toBeInstanceOf(PersistenceCorruptionError);
+      expect(db.calls).not.toContain("checkpoint:insert");
+    }
+    for (const state of [
+      { mode: "DRY_RUN" }, { instrumentId: "other" }, { riskBasisCheckpointRef: null },
+      { latestROutcomeRef: null }, { latestROutcomeRef: "r-2" },
+      { executionAuthorityCheckpointRef: "other" }, { executionAuthorityIdentity: null },
+    ]) {
+      const { db, request } = adoptionFixture();
+      await expect(new PostgresOrchestrationCommitService(db).adoptOutcome({ ...request,
+        resultingRecoveryState: { ...request.resultingRecoveryState, ...state } as never }))
+        .rejects.toBeInstanceOf(TypeError);
+      expect(db.calls).not.toContain("checkpoint:insert");
+    }
+  });
+
+  it("rolls back all writes when final authorization is lost", async () => {
+    for (const flag of ["expireAtFinal", "changeFenceAtFinal"] as const) {
+      const { db, request } = adoptionFixture("fill-next"); db[flag] = true;
+      const answer = await new PostgresOrchestrationCommitService(db).adoptOutcome(request);
+      expect(answer.status).toBe(flag === "expireAtFinal" ? "LEASE_LOST" : "FENCE_CONFLICT");
+      expect(db.calls.at(-1)).toBe("rollback");
+      expect(db.checkpoints.size).toBe(1);
+      expect(db.nextPending).toBeNull();
+      expect(db.recovery?.["revision"]).toBe("1");
+      expect(db.adoptionReceipt).toBeNull();
+    }
+  });
+
+  it("reconstructs a resolved next effect with the receipt fence on historical retry", async () => {
+    const { db, request } = adoptionFixture("fill-next");
+    const service = new PostgresOrchestrationCommitService(db);
+    expect((await service.adoptOutcome(request)).status).toBe("ADOPTED");
+    db.pending = { ...db.pending, state: "RESOLVED", resolved_outcome_key: "later",
+      resolved_revision: "3", resolved_fence: "4" };
+    db.lease = { session_id: "session-1", owner_id: "new-owner", fence_token: "4", expires_at_ms: "3000" };
+    db.calls = [];
+    expect(await service.adoptOutcome({ ...request, ownerId: "new-owner" as never,
+      expectedFence: 4 as never })).toMatchObject({ status: "ALREADY_ADOPTED" });
+    expect(db.calls).not.toContain("effect:pending-load");
+    expect(db.calls).not.toContain("lease-lock");
+  });
+
+  it("rejects outcome identity mismatch and invalid proof before writing", async () => {
+    const { db, request, outcome } = adoptionFixture();
+    db.outcome = outcomeRow(createOrchestrationExternalOutcome({ ...outcome, sessionId: "another-session" }));
+    await expect(new PostgresOrchestrationCommitService(db).adoptOutcome(request)).rejects.toBeInstanceOf(TypeError);
+    expect(db.calls).not.toContain("lease-lock");
+    const attempt = adoptionFixture();
+    await expect(new PostgresOrchestrationCommitService(attempt.db).adoptOutcome({ ...attempt.request,
+      committedCheckpoint: checkpoint("other-attempt", [requested, acknowledged]) }))
+      .rejects.toBeInstanceOf(TypeError);
+    const malformed = adoptionFixture();
+    await expect(new PostgresOrchestrationCommitService(malformed.db).adoptOutcome({ ...malformed.request,
+      committedCheckpoint: cancellationAfter, resultingRecoveryState: {
+        ...malformed.request.resultingRecoveryState,
+        executionAuthorityCheckpointRef: cancellationAfter.checkpointRef } }))
+      .rejects.toBeInstanceOf(TypeError);
+    expect(malformed.db.calls).not.toContain("checkpoint:insert");
+  });
+
+  it("classifies committed evidence conflict, next key collision and orphan next creation", async () => {
+    const { db, request } = adoptionFixture();
+    const contradictory = createExecutionAuthorityCheckpoint({ ...request.committedCheckpoint,
+      evidence: { ...request.committedCheckpoint.evidence, transitions: [requested, { ...acknowledged,
+        acknowledgement: { ...acknowledged.acknowledgement, adapterOrderId: "different" } }] } });
+    db.checkpoints.set(request.committedCheckpoint.checkpointRef, checkpointRow(contradictory));
+    expect(await new PostgresOrchestrationCommitService(db).adoptOutcome(request))
+      .toEqual({ status: "CHECKPOINT_CONFLICT", checkpointRef: request.committedCheckpoint.checkpointRef });
+    expect(db.calls).not.toContain("checkpoint:insert");
+    for (const same of [true, false]) {
+      const next = adoptionFixture("fill-next");
+      const identity = next.request.nextPendingEffectIdentity!;
+      next.db.pending = row(pendingFields, ["ORCHESTRATION_PENDING_EFFECT_V1", next.request.sessionId,
+        identity.adapterId, identity.environment, identity.operation, identity.executionAttemptId,
+        identity.idempotencyKey, same ? identity.requestFingerprint : "different", "2", "3",
+        "PENDING", null, null, null]);
+      if (same) {
+        await expect(new PostgresOrchestrationCommitService(next.db).adoptOutcome(next.request))
+          .rejects.toBeInstanceOf(PersistenceCorruptionError);
+      } else {
+        expect(await new PostgresOrchestrationCommitService(next.db).adoptOutcome(next.request))
+          .toEqual({ status: "EFFECT_CONFLICT" });
+      }
+      expect(next.db.calls).not.toContain("checkpoint:insert");
+    }
+  });
+
+  it("locks linked then next pending and rechecks the receipt before mutation", async () => {
+    const original = adoptionFixture();
+    const request: AdoptOutcomeRequest = { ...original.request,
+      committedCheckpoint: cancellationAfter,
+      resultingRecoveryState: { ...original.request.resultingRecoveryState,
+        executionAuthorityCheckpointRef: cancellationAfter.checkpointRef },
+      nextPendingEffectIdentity: { adapterId: brokerAdapterId("adapter-1"), environment: "SANDBOX",
+        operation: "ENTRY_CANCELLATION", executionAttemptId: base.identity.executionAttemptId,
+        idempotencyKey: cancellation.request.idempotencyKey,
+        requestFingerprint: fingerprintEntryCancellation(cancellation.request) } };
+    const answer = await new PostgresOrchestrationCommitService(original.db).adoptOutcome(request);
+    expect(answer.status).toBe("ADOPTED");
+    expect(original.db.pending?.["state"]).toBe("RESOLVED");
+    expect(original.db.nextPending?.["state"]).toBe("PENDING");
+    const locks = original.db.calls.flatMap((call, index) => call === "effect:pending-load" ? [index] : []);
+    expect(locks.length).toBeGreaterThanOrEqual(3);
+    expect(original.db.calls.indexOf("select-for-update")).toBeLessThan(locks[0]!);
+    expect(locks[0]!).toBeLessThan(locks[1]!);
+    expect(original.db.calls.filter((call) => call === "receipt:adoption-load")).toHaveLength(2);
+    expect(original.db.calls.lastIndexOf("receipt:adoption-load"))
+      .toBeLessThan(original.db.calls.indexOf("checkpoint:insert"));
+
+    const seed = adoptionFixture();
+    expect((await new PostgresOrchestrationCommitService(seed.db).adoptOutcome(seed.request)).status).toBe("ADOPTED");
+    const retry = adoptionFixture();
+    retry.db.checkpoints.set(retry.request.committedCheckpoint.checkpointRef,
+      checkpointRow(retry.request.committedCheckpoint));
+    retry.db.adoptionReceiptOnRecheck = seed.db.adoptionReceipt;
+    expect(await new PostgresOrchestrationCommitService(retry.db).adoptOutcome(retry.request))
+      .toMatchObject({ status: "ALREADY_ADOPTED" });
+    expect(retry.db.calls).not.toContain("checkpoint:insert");
+  });
+
+  it("rolls back checkpoint, resolution, next creation and recovery on failures", async () => {
+    for (const marker of ["checkpoint:insert", "effect:pending-resolve", "effect:pending-insert",
+      "save-update", "receipt:adoption-insert"]) {
+      const { db, request } = adoptionFixture();
+      const nextRequest: AdoptOutcomeRequest = { ...request, committedCheckpoint: cancellationAfter,
+        resultingRecoveryState: { ...request.resultingRecoveryState,
+          executionAuthorityCheckpointRef: cancellationAfter.checkpointRef },
+        nextPendingEffectIdentity: { adapterId: brokerAdapterId("adapter-1"), environment: "SANDBOX",
+          operation: "ENTRY_CANCELLATION", executionAttemptId: base.identity.executionAttemptId,
+          idempotencyKey: cancellation.request.idempotencyKey,
+          requestFingerprint: fingerprintEntryCancellation(cancellation.request) } };
+      db.failAt = marker;
+      await expect(new PostgresOrchestrationCommitService(db).adoptOutcome(nextRequest))
+        .rejects.toBeInstanceOf(Error);
+      expect(db.calls.at(-1)).toBe("rollback");
+      expect(db.checkpoints.size).toBe(1);
+      expect(db.pending?.["state"]).toBe("PENDING");
+      expect(db.nextPending).toBeNull();
+      expect(db.recovery?.["revision"]).toBe("1");
+      expect(db.adoptionReceipt).toBeNull();
+    }
+    for (const marker of ["save-update"] as const) {
+      const { db, request } = adoptionFixture("fill-next");
+      db.conflictAt = marker;
+      const run = new PostgresOrchestrationCommitService(db).adoptOutcome(request);
+      await expect(run).rejects.toBeInstanceOf(PersistenceCorruptionError);
+      expect(db.calls.at(-1)).toBe("rollback");
+      expect(db.checkpoints.size).toBe(1);
+      expect(db.pending).toBeNull();
+      expect(db.recovery?.["revision"]).toBe("1");
+    }
+    const race = adoptionFixture("fill-next");
+    const identity = race.request.nextPendingEffectIdentity!;
+    race.db.pendingOnInsert = row(pendingFields, ["ORCHESTRATION_PENDING_EFFECT_V1", race.request.sessionId,
+      identity.adapterId, identity.environment, identity.operation, identity.executionAttemptId,
+      identity.idempotencyKey, identity.requestFingerprint, "2", "3", "PENDING", null, null, null]);
+    expect(await new PostgresOrchestrationCommitService(race.db).adoptOutcome(race.request))
+      .toEqual({ status: "EFFECT_CONFLICT" });
+    expect(race.db.checkpoints.size).toBe(1);
+    expect(race.db.pending).toBeNull();
+    const collision = adoptionFixture("fill-next");
+    const collisionIdentity = collision.request.nextPendingEffectIdentity!;
+    collision.db.pendingOnInsert = row(pendingFields, ["ORCHESTRATION_PENDING_EFFECT_V1",
+      collision.request.sessionId, collisionIdentity.adapterId, collisionIdentity.environment,
+      collisionIdentity.operation, collisionIdentity.executionAttemptId, collisionIdentity.idempotencyKey,
+      "different", "2", "3", "PENDING", null, null, null]);
+    expect(await new PostgresOrchestrationCommitService(collision.db).adoptOutcome(collision.request))
+      .toEqual({ status: "EFFECT_CONFLICT" });
+    expect(collision.db.checkpoints.size).toBe(1);
+    expect(collision.db.pending).toBeNull();
+
+    const seed = adoptionFixture();
+    expect((await new PostgresOrchestrationCommitService(seed.db).adoptOutcome(seed.request)).status).toBe("ADOPTED");
+    const receiptConflict = adoptionFixture();
+    receiptConflict.db.adoptionReceiptOnInsert = { ...seed.db.adoptionReceipt,
+      adopting_owner_id: "other", commit_payload: {
+        ...(seed.db.adoptionReceipt!["commit_payload"] as Row), adoptingOwnerId: "other" } };
+    expect(await new PostgresOrchestrationCommitService(receiptConflict.db).adoptOutcome(receiptConflict.request))
+      .toEqual({ status: "ADOPTION_CONFLICT" });
+    expect(receiptConflict.db.checkpoints.size).toBe(1);
+    expect(receiptConflict.db.pending?.["state"]).toBe("PENDING");
+    expect(receiptConflict.db.recovery?.["revision"]).toBe("1");
+    expect(receiptConflict.db.adoptionReceipt).toBeNull();
+  });
+
+  it("rejects revision overflow before opening a transaction", async () => {
+    const { db, request } = adoptionFixture();
+    await expect(new PostgresOrchestrationCommitService(db).adoptOutcome({ ...request,
+      expectedRevision: Number.MAX_SAFE_INTEGER as never })).rejects.toMatchObject({ code: "REVISION_OVERFLOW" });
+    expect(db.transactions).toBe(0);
   });
 });

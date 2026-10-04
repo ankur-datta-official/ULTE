@@ -278,6 +278,18 @@ export interface CommitPendingIntentRequest {
   readonly resultingRecoveryState: OrchestrationRecoveryState;
   readonly pendingEffect: OrchestrationPendingEffect;
 }
+/** Next pending identity is creation intent; lifecycle facts are derived by the transaction owner. */
+export interface AdoptOutcomeRequest {
+  readonly sessionId: OrchestrationSessionId;
+  readonly ownerId: OrchestrationLeaseOwnerId;
+  readonly expectedRevision: OrchestrationRevision;
+  readonly expectedFence: OrchestrationFenceToken;
+  readonly previousCheckpointRef: ExecutionAuthorityCheckpointId;
+  readonly outcomeKey: OrchestrationOutcomeKey;
+  readonly committedCheckpoint: ExecutionAuthorityCheckpoint;
+  readonly resultingRecoveryState: OrchestrationRecoveryState;
+  readonly nextPendingEffectIdentity: OrchestrationPendingEffectIdentity | null;
+}
 export interface PendingIntentCommitReceipt extends PendingIntentLogicalPayload {
   readonly schemaVersion: typeof ORCHESTRATION_PENDING_INTENT_COMMIT_RECEIPT_V1;
   readonly committedRevision: OrchestrationRevision;

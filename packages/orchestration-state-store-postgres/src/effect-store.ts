@@ -103,6 +103,12 @@ async function readPending(db: PostgresTransaction, identity: OrchestrationPendi
     throw new PersistenceCorruptionError("Pending durable key has contradictory identity");
   return effect;
 }
+/** Caller-owned transaction lock; the caller decides whether a key collision is corruption or conflict. */
+export function loadPendingEffectForUpdateInTransaction(transaction: PostgresTransaction,
+  input: OrchestrationPendingEffectIdentity): Promise<OrchestrationPendingEffect | null> {
+  const identity = createOrchestrationPendingEffectIdentity(input);
+  return infrastructure(() => readPending(transaction, identity, true, false));
+}
 async function readOutcome(db: PostgresTransaction, key: OrchestrationOutcomeKey): Promise<OrchestrationExternalOutcome | null> {
   const row = atMostOne(await db.query<OutcomeRow>(OUTCOME_LOAD, [key]), "Outcome lookup");
   if (row === null) return null;
