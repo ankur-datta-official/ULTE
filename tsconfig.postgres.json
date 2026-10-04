@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": { "@ulte/*": ["packages/*/src/index.ts"] },
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["tests/integration/b1f-postgres*.ts"]
+}

@@ -1,4 +1,4 @@
-import { createInstrumentId } from "../../packages/instrument-model/src/index.js";
+import { createInstrumentId, unixMs } from "../../packages/instrument-model/src/index.js";
 import {
   FINALIZED_CANDLE_RECOVERY_EVIDENCE_SCHEMA_VERSION,
   restoreFinalizedCandleSnapshot,
@@ -159,8 +159,9 @@ function normalSetup(prices: Phase33aPriceFixture = {}) {
   const setupCandles = restoreCandles(setupCandleEvidence(prices));
   const contextRegime = classifyMarketRegime(contextCandles, createRegimeConfig(REGIME_CONFIG));
   const setupStructure = analyzeMarketStructure(setupCandles, createStructureConfig(STRUCTURE_CONFIG));
+  if (setupStructure.status !== "READY") throw new Error("Fixture structure was not ready");
   const setupEvaluation = evaluatePositionSetups({
-    asOf: PHASE33A_AS_OF, contextRegime, setupStructure, setupCandles,
+    asOf: unixMs(PHASE33A_AS_OF), contextRegime, setupStructure, setupCandles,
   }, createPositionSetupConfig(SETUP_CONFIG));
   if (setupEvaluation.status !== "READY") throw new Error(setupEvaluation.reason);
   const candidate = setupEvaluation.candidates.find((item) => item.stage === "CONFIRMED");

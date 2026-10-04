@@ -10,9 +10,13 @@
   },
   "scripts": {
     "typecheck": "tsc --build",
-    "test": "tsc --build && vitest run"
+    "test": "tsc --build && vitest run",
+    "test:postgres": "tsc --noEmit --project tsconfig.postgres.json && vitest run --config vitest.postgres.config.ts"
   },
   "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
     "typescript": "^5.9.0",
     "vitest": "^3.2.4"
   }
