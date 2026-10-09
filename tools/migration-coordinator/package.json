@@ -1,0 +1,5 @@
+{
+  "name": "@ulte/migration-coordinator",
+  "private": true,
+  "type": "module"
+}

@@ -3,6 +3,7 @@
   "extends": "./tsconfig.base.json",
   "files": [],
   "references": [
+    { "path": "./tools/migration-coordinator" },
     { "path": "./packages/instrument-model" },
     { "path": "./packages/exact-decimal" },
     { "path": "./packages/market-data" },
