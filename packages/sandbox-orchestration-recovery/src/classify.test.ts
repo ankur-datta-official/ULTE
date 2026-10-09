@@ -134,8 +134,13 @@ describe("recovery boot classification", () => {
       "CONFIRMED_ACCEPTED", p.effect)] }).status).not.toBe("OUTCOME_AVAILABLE");
   });
   it("R7 rejects terminal FAILED_NOT_SUBMITTED", () => {
-    expect(classify({ pendingEffects: [pending("FAILED_NOT_SUBMITTED")] })).toMatchObject({
+    const result = classify({ pendingEffects: [pending("FAILED_NOT_SUBMITTED")] });
+    expect(result).toMatchObject({
       status: "RECOVERY_REJECTED", reason: "UNSUPPORTED_TERMINAL_NON_SUBMISSION" });
+    expect(result.status).not.toBe("TERMINAL_NON_SUBMISSION_REQUIRED");
+    expect(result.status).not.toBe("TERMINAL_NON_SUBMISSION");
+    expect(result.status).not.toBe("READY");
+    expect(result).not.toHaveProperty("retryAuthorized");
   });
 
   it("R9 rejects stale fence", () => {

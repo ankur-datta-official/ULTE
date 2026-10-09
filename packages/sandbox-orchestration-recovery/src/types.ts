@@ -13,6 +13,9 @@ import type {
   OrchestrationRevision,
   OrchestrationSessionId,
   PendingIntentCommitReceipt,
+  TerminalNonSubmissionDispositionReceiptV1,
+  TerminalNonSubmissionDispositionRef,
+  TerminalNonSubmissionProofV1,
 } from "@ulte/orchestration-state-store";
 
 /** All records and receipts have already been loaded and validated by their owning service. */
@@ -89,6 +92,33 @@ export type RecoveryBootRejectionReason =
 
 export type RecoveryBootResult =
   | Readonly<RecoveryBootAuthorityRef & { readonly status: "READY" }>
+  /** Future result only. The current classifier still rejects FAILED_NOT_SUBMITTED.
+   * Neither this variant nor the terminal variant participates in current precedence; D4 owns it.
+   */
+  | Readonly<RecoveryBootAuthorityRef & {
+      readonly status: "TERMINAL_NON_SUBMISSION_REQUIRED";
+      readonly checkpointRef: ExecutionAuthorityCheckpointId;
+      readonly pendingEffect: OrchestrationPendingEffect & {
+        readonly state: "PENDING";
+        readonly resolvedOutcomeKey: null;
+        readonly resolvedRevision: null;
+        readonly resolvedFence: null;
+      };
+      readonly creationRef: PendingCreationRef;
+      readonly idempotency: Extract<LoadedIdempotency, { readonly status: "PRESENT" }> & {
+        readonly record: IdempotencyRecord & { readonly status: "FAILED_NOT_SUBMITTED" };
+      };
+      readonly proof: TerminalNonSubmissionProofV1;
+    }>
+  /** Future durable terminal result; the session cannot hydrate or resume execution. */
+  | Readonly<RecoveryBootAuthorityRef & {
+      readonly status: "TERMINAL_NON_SUBMISSION";
+      readonly checkpointRef: ExecutionAuthorityCheckpointId;
+      readonly dispositionRef: TerminalNonSubmissionDispositionRef;
+      readonly dispositionReceipt: TerminalNonSubmissionDispositionReceiptV1;
+      readonly resolvedPendingEffectIdentity: Readonly<OrchestrationPendingEffectIdentity>;
+      readonly sessionDisposition: "TERMINAL_NON_SUBMISSION";
+    }>
   | Readonly<RecoveryBootAuthorityRef & {
       readonly status: "INTENT_DISPOSITION_REQUIRED";
       readonly pendingEffect: OrchestrationPendingEffect;

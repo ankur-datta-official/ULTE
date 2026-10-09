@@ -14,7 +14,8 @@ import type {
 } from "./types.js";
 
 type Rejected = Extract<RecoveryBootResult, { readonly status: "RECOVERY_REJECTED" }>;
-type Candidate = Exclude<RecoveryBootResult, Rejected | { readonly status: "READY" }>;
+type Candidate = Extract<RecoveryBootResult, { readonly status: "RECONCILIATION_REQUIRED"
+  | "CANONICAL_OUTCOME_REQUIRED" | "OUTCOME_AVAILABLE" | "INTENT_DISPOSITION_REQUIRED" }>;
 
 function sameIdentity(a: OrchestrationPendingEffectIdentity, b: OrchestrationPendingEffectIdentity): boolean {
   return a.adapterId === b.adapterId && a.environment === b.environment
