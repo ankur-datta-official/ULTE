@@ -153,7 +153,7 @@ export async function saveRecoveryStateInTransaction(transaction: PostgresTransa
   const nextRevision = candidate.revision + 1;
   const updated = await transaction.query<RecoveryRow>(UPDATE_SQL, [
     candidate.sessionId, candidate.revision, candidate.fenceToken, nextRevision,
-    ...values(candidate).slice(4),
+    ...values(candidate).slice(4, -1),
   ]);
   if (updated.rowCount !== updated.rows.length || updated.rows.length > 1 || updated.rowCount < 0)
     throw new PersistenceCorruptionError("Conditional recovery update returned an impossible row count");

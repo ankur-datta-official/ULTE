@@ -1,0 +1,145 @@
+﻿Phase33C2B3-D2C integration and real PostgreSQL audit
+Date: 2026-10-10 (Asia/Dhaka)
+
+VERDICT = FINAL PASS
+POSTGRES_ENVIRONMENT = WSL2_POSTGRESQL_18
+REAL_POSTGRES_VERIFIED = YES
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+
+Workspace and scope
+- HEAD = 63680fdbc0b4c77a43e9ad7ff8aede7908aa876c.
+- origin/main = 63680fdbc0b4c77a43e9ad7ff8aede7908aa876c.
+- Initial dirty workspace exactly matched the supplied D2C file list.
+- No commit, push, reset, restore, checkout, stash, clean, or revert occurred.
+- No D3 write API or workflow, broker I/O, runtime trading rule, or reconciliation
+  classifier change was made. This VERIFIED capability is schema evidence only.
+
+Temporary authentication and restoration
+- PostgreSQL 18.6, Ubuntu WSL2 cluster 18/main, port 55432, online and listening
+  on the current route-discovered WSL IPv4 address before and after the tests.
+- TEMPORARY_TEST_AUTH = NARROW_HOST_TRUST. The temporary rule matched only
+  database ulte_b1f_test, role ulte_test, and the exact route-discovered Windows
+  host IPv4 /32. It was inserted ahead of broader host rules and reloaded.
+- The original scram-sha-256 rule and all other HBA bytes were retained.
+- Final-run backup outside the repository:
+  /tmp/ulte_d2c_r9_pg_hba_b82f530e5b59432f8e9540bca5f272f2.bak
+- Original SHA-256 = dd4247892b7a3843814dc485cb55df577103fa4ecf97a9c81f9d2c79ea989e67.
+- Backup SHA-256 before insertion = same original SHA-256.
+- Restored SHA-256 = same original SHA-256. PostgreSQL configuration reloaded.
+- PG_HBA_RESTORE = PASS. TEMPORARY_TRUST_RULE_PRESENT = NO. A separate
+  post-run read of pg_hba.conf confirmed the same hash and no temporary marker.
+- No password was used, printed, or written. The non-secret test URL existed
+  only in the command process environment. CREDENTIAL_LEAKAGE = NO.
+
+Windows passwordless preflight
+- current_database = ulte_b1f_test; current_user = ulte_test;
+  inet_server_port = 55432; inet_server_addr matched the current WSL listener.
+- ulte_test: LOGIN, NOSUPERUSER, NOCREATEDB, NOCREATEROLE, NOREPLICATION.
+- PostgreSQL server_version = 18.6; plpgsql exists and lanpltrusted = true.
+- TEST_ROLE_SCHEMA_PERMISSION = PASS: created, verified, and dropped a uniquely
+  named disposable schema as ulte_test.
+
+Static and real gates, final run
+- Coordinator fake/static suite: 8/8 PASS.
+- @ulte/orchestration-state-store-postgres: 116/116 PASS, 9 files.
+- Root typecheck: PASS.
+- Configured PostgreSQL test TypeScript check: PASS.
+- git diff --check: PASS; Git emitted only working-copy line-ending warnings.
+- STATIC_GATES = PASS.
+- D2C_REAL_POSTGRES = 8/8 PASS using vitest.postgres.config.ts. The eighth
+  case is a separate cleanup and paired-error regression; all original seven
+  real PostgreSQL cases remain intact.
+- B1F_REAL_POSTGRES = 15/15 PASS using vitest.postgres.config.ts.
+
+D2C real database proofs
+- Fresh coordinated install applied nine migrations in exact order: execution
+  0001/0002, orchestration 0001-0006, then integration 0001. The ledger's
+  ordered stream/name/position/SHA-256 digest entries matched repository files.
+- Execution-only and orchestration-only installations stayed isolated and
+  DISABLED. Applying integration before execution failed on the absent target.
+- The exact named catalog constraint
+  orchestration_terminal_broker_idempotency_fk is contype=f,
+  convalidated=true, from orchestration_terminal_non_submission_disposition
+  (adapter_id, environment, idempotency_key) to broker_idempotency_records
+  (adapter_id, environment, idempotency_key). Both tables were in the same
+  disposable application schema. Structured catalog fields also proved
+  condeferrable=false, condeferred=false, confupdtype='a' (NO ACTION),
+  confdeltype='a' (NO ACTION), and confmatchtype='s' (SIMPLE).
+  REAL_FK_CATALOG_VERIFIED = YES. REAL_FK_SEMANTICS_VERIFIED = YES.
+- The source audit identified that the earlier capability verifier did not
+  inspect FK deferrability, referential actions, or match type. It could have
+  returned VERIFIED for a same-named weakened FK. The verifier now requires
+  the exact structured catalog values above, with no constraint-text parsing.
+  Static regressions prove DISABLED for each altered field, unvalidated or
+  missing FK, wrong ordered columns/target, and wrong topology; the complete
+  normal catalog fixture remains VERIFIED.
+- Real PostgreSQL replaced the FK one variant at a time while retaining the
+  same name and ordered source/target columns. DEFERRABLE, INITIALLY DEFERRED,
+  ON DELETE CASCADE, ON UPDATE CASCADE, and MATCH FULL each produced DISABLED.
+  Recreating the normal FK between variants and at the end produced VERIFIED.
+  DEFERRABLE_FALSE_POSITIVE_BLOCKED = YES.
+  REFERENTIAL_ACTION_FALSE_POSITIVE_BLOCKED = YES.
+  MATCH_TYPE_FALSE_POSITIVE_BLOCKED = YES.
+- An orphan terminal disposition insert was rejected with SQLSTATE 23503;
+  the insert succeeded after the matching broker record was present.
+  REAL_FK_REJECT_ACCEPT_VERIFIED = YES.
+- One physical connection wrote execution-store and orchestration-store rows
+  in one transaction, forced ROLLBACK, and found both writes absent afterward.
+  CROSS_STORE_SINGLE_TX_VERIFIED = YES.
+- Coordinator replay applied no SQL and skipped all nine migrations. A changed
+  ledger digest failed with MIGRATION_HISTORY_CONFLICT. Missing ledger,
+  invalid/unvalidated FK, and contradictory search_path topology made the
+  read-only capability DISABLED.
+- Two independent backend PIDs raced the same database/schema migration.
+  A barrier held connection A after lock acquisition; pg_blocking_pids
+  identified A as B's blocker before release. B then skipped the already
+  applied migrations. MIGRATION_ADVISORY_LOCK_VERIFIED = YES.
+- A complete ledger and catalog in the exact database/schema yielded
+  D2C_SCHEMA_CAPABILITY = VERIFIED. This does not authorize readiness.
+
+Repairs established by the real runs
+- The existing recovery-state UPDATE supplied 15 bind values for 14 SQL
+  placeholders. The write now omits the terminal disposition field, which
+  that ordinary UPDATE does not set, and its fake regression asserts 14 binds.
+- B1F A1/A3 queried resolved_outcome_key after migration 0006 renamed it.
+  They now assert resolved_authority_ref and EXTERNAL_OUTCOME resolution kind.
+- The source audit identified two fixture cleanup gaps: setup errors could be
+  masked by cleanup errors, and one arbitrary pooled ROLLBACK did not prove
+  all physical sessions clean. Both setup and work failure paths now retain
+  the primary error and cleanup error together in AggregateError when needed.
+  The fixture tracks every checkout, retires each physical connection on
+  release, refuses pool shutdown while a checkout remains, drains the work
+  pool, then uses a fresh connection to the verified test database/role to
+  drop only its run-created schema. No work session can carry an open or
+  aborted transaction into later fixture work or schema deletion.
+- A new real test caused SQLSTATE 22012 inside BEGIN, observed SQLSTATE 25P02
+  on that aborted session, released it, proved a later fixture checkout clean,
+  drained the work pool, confirmed its schema absent, then ran new fixture
+  work. Deterministic injected setup/work plus cleanup errors verified both
+  errors remain visible. SETUP_ERROR_PRESERVATION = PASS.
+  ABORTED_TRANSACTION_CLEANUP = PASS. No assertion was weakened.
+
+Cleanup and final review
+- REAL_TEST_CLEANUP = PASS. No d2c_* or b1f_* disposable schemas remained;
+  the dedicated test database, role, public schema, and unrelated schemas were
+  untouched. Test transactions rolled back and clients closed.
+- Final source review: git diff --stat, git diff --check, git diff, and the
+  untracked migration/D2C test/audit were reviewed. No credentials, literal
+  WSL/Windows-host IP, persistent trust rule, skipped tests, or false
+  capability success were retained in repository files.
+- Final git status (unstaged, uncommitted):
+  M packages/orchestration-state-store-postgres/src/recovery-store.test.ts
+  M packages/orchestration-state-store-postgres/src/recovery-store.ts
+  M tests/integration/b1f-postgres.test.ts
+  M tools/migration-coordinator/src/index.test.ts
+  M tools/migration-coordinator/src/index.ts
+  M tsconfig.postgres.json
+  M vitest.postgres.config.ts
+  ?? PHASE33C2B3_D2C_INTEGRATION_REAL_POSTGRES_AUDIT.txt
+  ?? migrations/
+  ?? tests/integration/d2c-postgres.test.ts
+
+FINAL PASS applies only to this D2C real PostgreSQL verification.
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN

@@ -81,6 +81,7 @@ class FakePostgres implements PostgresExecutor {
     if (marker === "save-update") {
       this.updateSql = sql;
       expect(sql).toMatch(/WHERE session_id = \$1 AND revision = \$2 AND fence_token = \$3/);
+      expect(params).toHaveLength(14);
       if (this.failUpdate || this.row === null || this.row["session_id"] !== params[0]
         || Number(this.row["revision"]) !== params[1] || Number(this.row["fence_token"]) !== params[2]) {
         return result<T>([]);

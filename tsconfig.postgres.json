@@ -12,5 +12,5 @@
     "paths": { "@ulte/*": ["packages/*/src/index.ts"] },
     "types": ["node", "vitest/globals"]
   },
-  "include": ["tests/integration/b1f-postgres*.ts"]
+  "include": ["tests/integration/b1f-postgres*.ts", "tests/integration/d2c-postgres.test.ts"]
 }

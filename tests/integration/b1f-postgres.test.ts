@@ -197,9 +197,10 @@ describe.sequential("B1F real PostgreSQL concurrency and recovery", () => {
     expect(a.status).toBe("ADOPTED");
     expect(b).toMatchObject({ status: "REVISION_CONFLICT", currentRevision: 2 });
     await assertDurable(db, "adoption", 2, 2, 1);
-    const linked = await db.observer.query<{ state: string; resolved_outcome_key: string }>(
-      "SELECT state,resolved_outcome_key FROM orchestration_pending_effect", []);
-    expect(linked.rows[0]).toMatchObject({ state: "RESOLVED", resolved_outcome_key: f.outcome.outcomeKey });
+    const linked = await db.observer.query<{ state: string; resolution_kind: string; resolved_authority_ref: string }>(
+      "SELECT state,resolution_kind,resolved_authority_ref FROM orchestration_pending_effect", []);
+    expect(linked.rows[0]).toMatchObject({ state: "RESOLVED", resolution_kind: "EXTERNAL_OUTCOME",
+      resolved_authority_ref: f.outcome.outcomeKey });
     expect((await new PostgresOrchestrationCommitService(db.b).adoptOutcome(f.request)).status).toBe("ALREADY_ADOPTED");
   }));
 
@@ -229,9 +230,9 @@ describe.sequential("B1F real PostgreSQL concurrency and recovery", () => {
     expect(winner.status).toBe("ADOPTED");
     expect(stale).toMatchObject({ status: "REVISION_CONFLICT", currentRevision: 2 });
     await assertDurable(db, "adoption", 2, 2, 1);
-    expect((await db.observer.query<{ resolved_outcome_key: string }>(
-      "SELECT resolved_outcome_key FROM orchestration_pending_effect", [])).rows[0]!.resolved_outcome_key)
-      .toBe(a.outcome.outcomeKey);
+    expect((await db.observer.query<{ resolution_kind: string; resolved_authority_ref: string }>(
+      "SELECT resolution_kind,resolved_authority_ref FROM orchestration_pending_effect", [])).rows[0])
+      .toEqual({ resolution_kind: "EXTERNAL_OUTCOME", resolved_authority_ref: a.outcome.outcomeKey });
     const later: AdoptOutcomeRequest = { ...b.request, expectedRevision: 2 as never,
       previousCheckpointRef: a.request.committedCheckpoint.checkpointRef };
     await expect(new PostgresOrchestrationCommitService(db.b).adoptOutcome(later))
