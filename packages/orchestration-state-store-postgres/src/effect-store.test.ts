@@ -31,7 +31,7 @@ function outcome(overrides: Record<string, unknown> = {}) {
 }
 const pendingFields = ["schema_version", "session_id", "adapter_id", "environment", "operation",
   "execution_attempt_id", "idempotency_key", "request_fingerprint", "created_revision", "created_fence",
-  "state", "resolved_outcome_key", "resolved_revision", "resolved_fence"];
+  "state", "resolution_kind", "resolved_authority_ref", "resolved_revision", "resolved_fence"];
 const outcomeFields = ["schema_version", "outcome_key", "session_id", "execution_attempt_id", "observed_at_ms",
   "observed_fence", "pending_adapter_id", "pending_environment", "pending_operation",
   "pending_execution_attempt_id", "pending_idempotency_key", "pending_request_fingerprint",
@@ -39,7 +39,9 @@ const outcomeFields = ["schema_version", "outcome_key", "session_id", "execution
 function pendingRow(value = effect()): Row {
   const values = [value.schemaVersion, value.sessionId, value.adapterId, value.environment, value.operation,
     value.executionAttemptId, value.idempotencyKey, value.requestFingerprint, String(value.createdRevision),
-    String(value.createdFence), value.state, value.resolvedOutcomeKey, value.resolvedRevision, value.resolvedFence];
+    String(value.createdFence), value.state,
+    value.state === "RESOLVED" ? "EXTERNAL_OUTCOME" : null,
+    value.resolvedOutcomeKey, value.resolvedRevision, value.resolvedFence];
   return Object.fromEntries(pendingFields.map((field, index) => [field, values[index]]));
 }
 function outcomeRow(value = outcome()): Row {
@@ -83,7 +85,8 @@ class FakePostgres implements PostgresExecutor {
     if (op === "pending-resolve") {
       const row = this.pending.get(`${params[0]}:${params[1]}`);
       if (this.failResolution || !row || row["state"] !== "PENDING") return result<T>([]);
-      const updated = { ...row, state: "RESOLVED", resolved_outcome_key: params[2],
+      const updated = { ...row, state: "RESOLVED", resolution_kind: "EXTERNAL_OUTCOME",
+        resolved_authority_ref: params[2],
         resolved_revision: params[3], resolved_fence: params[4] };
       this.pending.set(this.key(updated), updated); return result<T>([updated]);
     }

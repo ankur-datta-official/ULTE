@@ -10,7 +10,7 @@ export class PersistenceConflictError extends Error {
   public override readonly name = "PersistenceConflictError";
 
   public constructor(
-    public readonly code: "CONCURRENT_RECOVERY_CONFLICT" | "REVISION_OVERFLOW" | "CONCURRENT_LEASE_CONFLICT" | "LEASE_FENCE_OVERFLOW",
+    public readonly code: "CONCURRENT_RECOVERY_CONFLICT" | "REVISION_OVERFLOW" | "CONCURRENT_LEASE_CONFLICT" | "LEASE_FENCE_OVERFLOW" | "TERMINAL_STATE_CONFLICT",
     message: string,
   ) {
     super(message);

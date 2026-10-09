@@ -14,7 +14,7 @@ import type { PostgresExecutor, PostgresQueryResult, PostgresTransaction } from 
 
 const PENDING_COLUMNS = `schema_version, session_id, adapter_id, environment, operation,
  execution_attempt_id, idempotency_key, request_fingerprint, created_revision, created_fence,
- state, resolved_outcome_key, resolved_revision, resolved_fence`;
+ state, resolution_kind, resolved_authority_ref, resolved_revision, resolved_fence`;
 const OUTCOME_COLUMNS = `schema_version, outcome_key, session_id, execution_attempt_id,
  observed_at_ms, observed_fence, pending_adapter_id, pending_environment, pending_operation,
  pending_execution_attempt_id, pending_idempotency_key, pending_request_fingerprint,
@@ -26,10 +26,11 @@ const PENDING_LIST = `/* effect:pending-list */ SELECT ${PENDING_COLUMNS} FROM o
  WHERE session_id = $1 AND state = 'PENDING'
  ORDER BY created_revision ASC, adapter_id ASC, idempotency_key ASC`;
 const PENDING_INSERT = `/* effect:pending-insert */ INSERT INTO orchestration_pending_effect (${PENDING_COLUMNS})
- VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
  ON CONFLICT (adapter_id, idempotency_key) DO NOTHING RETURNING ${PENDING_COLUMNS}`;
 const PENDING_RESOLVE = `/* effect:pending-resolve */ UPDATE orchestration_pending_effect
- SET state = 'RESOLVED', resolved_outcome_key = $3, resolved_revision = $4, resolved_fence = $5
+ SET state = 'RESOLVED', resolution_kind = 'EXTERNAL_OUTCOME', resolved_authority_ref = $3,
+   resolved_revision = $4, resolved_fence = $5
  WHERE adapter_id = $1 AND idempotency_key = $2 AND state = 'PENDING'
    AND session_id = $6 AND environment = $7 AND operation = $8
    AND execution_attempt_id = $9 AND request_fingerprint = $10
@@ -80,7 +81,9 @@ function sameOutcome(a: OrchestrationExternalOutcome, b: OrchestrationExternalOu
 function pendingValues(effect: OrchestrationPendingEffect): readonly unknown[] {
   return [effect.schemaVersion, effect.sessionId, effect.adapterId, effect.environment, effect.operation,
     effect.executionAttemptId, effect.idempotencyKey, effect.requestFingerprint,
-    effect.createdRevision, effect.createdFence, effect.state, effect.resolvedOutcomeKey,
+    effect.createdRevision, effect.createdFence, effect.state,
+    effect.schemaVersion === "ORCHESTRATION_PENDING_EFFECT_V2" ? effect.resolutionKind : null,
+    effect.schemaVersion === "ORCHESTRATION_PENDING_EFFECT_V2" ? effect.resolvedAuthorityRef : null,
     effect.resolvedRevision, effect.resolvedFence];
 }
 function outcomeValues(outcome: OrchestrationExternalOutcome): readonly unknown[] {

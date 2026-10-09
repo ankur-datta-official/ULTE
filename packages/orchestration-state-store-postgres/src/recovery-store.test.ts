@@ -98,12 +98,25 @@ class FakePostgres implements PostgresExecutor {
   private fromValues(params: readonly unknown[]): Row {
     const keys = ["schema_version", "session_id", "revision", "fence_token", "mode", "instrument_id",
       "execution_authority_checkpoint_ref", "execution_attempt_id", "execution_plan_id", "trade_intent_id",
-      "candidate_id", "execution_instrument_id", "risk_basis_checkpoint_ref", "latest_r_outcome_ref"];
+      "candidate_id", "execution_instrument_id", "risk_basis_checkpoint_ref", "latest_r_outcome_ref",
+      "terminal_non_submission_disposition_ref"];
     return Object.fromEntries(keys.map((key, index) => [key, params[index]]));
   }
 }
 
 describe("Postgres orchestration recovery store", () => {
+  it("loads terminal V2 but refuses ordinary CAS and initialization replacement", async () => {
+    const db = new FakePostgres(), store = new PostgresOrchestrationRecoveryStore(db);
+    await store.initializeRecoveryState(write(0, 7, true));
+    db.row = { ...db.row, schema_version: "ORCHESTRATION_RECOVERY_RECORD_V2",
+      terminal_non_submission_disposition_ref: "terminal-1" };
+    expect((await store.loadRecoveryState(sessionId))?.terminalNonSubmissionDispositionRef).toBe("terminal-1");
+    await expect(store.saveRecoveryState(write(0, 7, true)))
+      .rejects.toMatchObject({ code: "TERMINAL_STATE_CONFLICT" });
+    await expect(store.initializeRecoveryState(write(0, 7, true)))
+      .rejects.toMatchObject({ code: "TERMINAL_STATE_CONFLICT" });
+    expect(db.row?.["revision"]).toBe(0);
+  });
   it("shares one CAS implementation with caller-owned transactions and rolls back outer failures", async () => {
     const db = new FakePostgres(), store = new PostgresOrchestrationRecoveryStore(db);
     await store.initializeRecoveryState(write());

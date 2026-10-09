@@ -15,14 +15,14 @@ import type { PostgresExecutor, PostgresTransaction } from "./postgres.js";
 const COLUMNS = `schema_version, session_id, revision, fence_token, mode, instrument_id,
   execution_authority_checkpoint_ref, execution_attempt_id, execution_plan_id,
   trade_intent_id, candidate_id, execution_instrument_id,
-  risk_basis_checkpoint_ref, latest_r_outcome_ref`;
+  risk_basis_checkpoint_ref, latest_r_outcome_ref, terminal_non_submission_disposition_ref`;
 
 const LOAD_SQL = `/* orchestration-state-store-postgres:load */
 SELECT ${COLUMNS} FROM orchestration_recovery_state WHERE session_id = $1`;
 
 const INSERT_SQL = `/* orchestration-state-store-postgres:initialize-insert */
 INSERT INTO orchestration_recovery_state (${COLUMNS})
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 ON CONFLICT (session_id) DO NOTHING
 RETURNING ${COLUMNS}`;
 
@@ -37,6 +37,7 @@ SET revision = $4, mode = $5, instrument_id = $6,
   execution_instrument_id = $12, risk_basis_checkpoint_ref = $13,
   latest_r_outcome_ref = $14
 WHERE session_id = $1 AND revision = $2 AND fence_token = $3
+  AND terminal_non_submission_disposition_ref IS NULL
 RETURNING ${COLUMNS}`;
 
 function values(record: OrchestrationRecoveryRecord): readonly unknown[] {
@@ -47,6 +48,7 @@ function values(record: OrchestrationRecoveryRecord): readonly unknown[] {
     identity?.executionAttemptId ?? null, identity?.executionPlanId ?? null,
     identity?.tradeIntentId ?? null, identity?.candidateId ?? null,
     identity?.instrumentId ?? null, record.riskBasisCheckpointRef, record.latestROutcomeRef,
+    record.schemaVersion === "ORCHESTRATION_RECOVERY_RECORD_V2" ? record.terminalNonSubmissionDispositionRef : null,
   ];
 }
 
@@ -115,6 +117,9 @@ export class PostgresOrchestrationRecoveryStore implements OrchestrationRecovery
       if (inserted.rows.length !== 0) throw new PersistenceCorruptionError("Initialization returned multiple rows");
       const current = await lockedRecord(transaction, candidate.sessionId);
       if (current === null) throw new PersistenceConflictError("CONCURRENT_RECOVERY_CONFLICT", "Conflicting initialization row disappeared");
+      if (current.schemaVersion === "ORCHESTRATION_RECOVERY_RECORD_V2") {
+        throw new PersistenceConflictError("TERMINAL_STATE_CONFLICT", "Terminal recovery cannot be reinitialized");
+      }
       if (current.fenceToken !== candidate.fenceToken) {
         return Object.freeze({ status: "FENCE_CONFLICT", currentFence: current.fenceToken });
       }
@@ -133,6 +138,9 @@ export async function saveRecoveryStateInTransaction(transaction: PostgresTransa
   const candidate = validatedWrite(write);
   const current = await lockedRecord(transaction, candidate.sessionId);
   if (current === null) return Object.freeze({ status: "NOT_FOUND" });
+  if (current.schemaVersion === "ORCHESTRATION_RECOVERY_RECORD_V2") {
+    throw new PersistenceConflictError("TERMINAL_STATE_CONFLICT", "Terminal recovery cannot be mutated");
+  }
   if (current.fenceToken !== candidate.fenceToken) {
     return Object.freeze({ status: "FENCE_CONFLICT", currentFence: current.fenceToken });
   }

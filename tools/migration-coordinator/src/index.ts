@@ -13,6 +13,7 @@ const files = {
     "0003_orchestration_pending_effects_and_outcomes.sql",
     "0004_execution_authority_checkpoint.sql",
     "0005_orchestration_commit_receipts.sql",
+    "0006_terminal_non_submission_persistence.sql",
   ],
   INTEGRATION: [],
 } as const satisfies Record<MigrationStream, readonly string[]>;
@@ -89,13 +90,13 @@ export interface TerminalSchemaCapability {
   readonly reasons: readonly string[];
 }
 
-/** D2A has no 0006, integration 0001, receipt catalog, or validated FK. */
+/** D2B keeps terminal persistence disabled pending integration migration and catalog verification. */
 export function terminalSchemaCapability(): TerminalSchemaCapability {
   return Object.freeze({
     capability: "TERMINAL_NON_SUBMISSION_PERSISTENCE",
     status: "DISABLED",
     reasons: Object.freeze([
-      "ORCHESTRATION_0006_ABSENT", "INTEGRATION_0001_ABSENT", "TERMINAL_CATALOG_UNVERIFIED",
+      "INTEGRATION_0001_ABSENT", "TERMINAL_CATALOG_UNVERIFIED",
     ]),
   });
 }
@@ -103,7 +104,7 @@ export function terminalSchemaCapability(): TerminalSchemaCapability {
 /* Future enablement requires verified execution 0001/0002, orchestration through 0006,
    integration 0001, matching DB/schema and digests, the exact terminal receipt columns,
    and the exact validated three-column FK (pg_constraint.convalidated = true).
-   No D2A API can produce an enabled capability. */
+   No D2B API can produce an enabled capability. */
 
 interface IdentityRow { database: string; schema: string | null; schemas: string[]; }
 interface LedgerRow { stream: string; name: string; position: number; digest: string; }

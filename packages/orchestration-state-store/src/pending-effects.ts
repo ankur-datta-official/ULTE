@@ -14,6 +14,7 @@ import { orchestrationFenceToken, orchestrationRevision, orchestrationSessionId,
 declare const outcomeKeyBrand: unique symbol;
 export type OrchestrationOutcomeKey = string & { readonly [outcomeKeyBrand]: "OrchestrationOutcomeKey" };
 export const ORCHESTRATION_PENDING_EFFECT_SCHEMA_VERSION = "ORCHESTRATION_PENDING_EFFECT_V1" as const;
+export const ORCHESTRATION_PENDING_EFFECT_V2 = "ORCHESTRATION_PENDING_EFFECT_V2" as const;
 export const ORCHESTRATION_EXTERNAL_OUTCOME_SCHEMA_VERSION = "ORCHESTRATION_EXTERNAL_OUTCOME_V1" as const;
 
 /** The durable lookup key is (adapterId, idempotencyKey); all other fields detect conflicting reuse. */
@@ -26,8 +27,7 @@ export interface OrchestrationPendingEffectIdentity {
   readonly requestFingerprint: RequestFingerprint;
 }
 
-export type OrchestrationPendingEffect = Readonly<OrchestrationPendingEffectIdentity & {
-  readonly schemaVersion: typeof ORCHESTRATION_PENDING_EFFECT_SCHEMA_VERSION;
+type PendingBase = Readonly<OrchestrationPendingEffectIdentity & {
   readonly sessionId: OrchestrationSessionId;
   readonly createdRevision: OrchestrationRevision;
   readonly createdFence: OrchestrationFenceToken;
@@ -36,6 +36,12 @@ export type OrchestrationPendingEffect = Readonly<OrchestrationPendingEffectIden
   readonly resolvedRevision: OrchestrationRevision | null;
   readonly resolvedFence: OrchestrationFenceToken | null;
 }>;
+export type OrchestrationPendingEffect =
+  | Readonly<PendingBase & { readonly schemaVersion: typeof ORCHESTRATION_PENDING_EFFECT_SCHEMA_VERSION;
+      readonly resolutionKind?: "EXTERNAL_OUTCOME" | null; readonly resolvedAuthorityRef?: OrchestrationOutcomeKey | null }>
+  | Readonly<PendingBase & { readonly schemaVersion: typeof ORCHESTRATION_PENDING_EFFECT_V2;
+      readonly resolutionKind: "EXTERNAL_OUTCOME" | "TERMINAL_NON_SUBMISSION" | null;
+      readonly resolvedAuthorityRef: string | null }>;
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -73,9 +79,12 @@ export function createOrchestrationPendingEffectIdentity(value: unknown): Readon
 }
 const identityKeys = ["adapterId", "environment", "operation", "executionAttemptId", "idempotencyKey", "requestFingerprint"];
 export function createOrchestrationPendingEffect(value: unknown): OrchestrationPendingEffect {
+  const version = record(value) ? value["schemaVersion"] : undefined;
+  const v2 = version === ORCHESTRATION_PENDING_EFFECT_V2;
   if (!record(value) || !exact(value, ["schemaVersion", "sessionId", ...identityKeys,
-    "createdRevision", "createdFence", "state", "resolvedOutcomeKey", "resolvedRevision", "resolvedFence"])
-      || value["schemaVersion"] !== ORCHESTRATION_PENDING_EFFECT_SCHEMA_VERSION) {
+    "createdRevision", "createdFence", "state", "resolvedOutcomeKey", "resolvedRevision", "resolvedFence",
+    ...(v2 ? ["resolutionKind", "resolvedAuthorityRef"] : [])])
+      || (!v2 && version !== ORCHESTRATION_PENDING_EFFECT_SCHEMA_VERSION)) {
     throw new TypeError("Invalid pending effect record");
   }
   const identity = createOrchestrationPendingEffectIdentity(Object.fromEntries(identityKeys.map((key) => [key, value[key]])));
@@ -84,20 +93,33 @@ export function createOrchestrationPendingEffect(value: unknown): OrchestrationP
   const state = value["state"];
   if (state !== "PENDING" && state !== "RESOLVED") throw new TypeError("Invalid pending state");
   const resolution = [value["resolvedOutcomeKey"], value["resolvedRevision"], value["resolvedFence"]];
-  if (state === "PENDING" && resolution.some((field) => field !== null)
+  if (v2) {
+    const kind = value["resolutionKind"], ref = value["resolvedAuthorityRef"];
+    if (state === "PENDING" && (kind !== null || ref !== null || resolution.some((field) => field !== null))
+        || state === "RESOLVED" && (kind !== "EXTERNAL_OUTCOME" && kind !== "TERMINAL_NON_SUBMISSION"
+          || typeof ref !== "string" || !ref || ref.trim() !== ref
+          || value["resolvedRevision"] === null || value["resolvedFence"] === null
+          || kind === "TERMINAL_NON_SUBMISSION" && value["resolvedOutcomeKey"] !== null
+          || kind === "EXTERNAL_OUTCOME" && value["resolvedOutcomeKey"] !== ref)) {
+      throw new TypeError("Pending resolution authority disagrees with state");
+    }
+  } else if (state === "PENDING" && resolution.some((field) => field !== null)
       || state === "RESOLVED" && resolution.some((field) => field === null)) {
     throw new TypeError("Pending resolution fields disagree with state");
   }
   const resolvedRevision = state === "RESOLVED" ? orchestrationRevision(value["resolvedRevision"]) : null;
   if (resolvedRevision !== null && resolvedRevision < createdRevision) throw new TypeError("Resolution precedes creation");
   return Object.freeze({
-    schemaVersion: ORCHESTRATION_PENDING_EFFECT_SCHEMA_VERSION,
+    schemaVersion: v2 ? ORCHESTRATION_PENDING_EFFECT_V2 : ORCHESTRATION_PENDING_EFFECT_SCHEMA_VERSION,
     sessionId: orchestrationSessionId(value["sessionId"]), ...identity,
     createdRevision, createdFence, state,
-    resolvedOutcomeKey: state === "RESOLVED" ? orchestrationOutcomeKey(value["resolvedOutcomeKey"]) : null,
+    resolvedOutcomeKey: state === "RESOLVED" && (!v2 || value["resolutionKind"] === "EXTERNAL_OUTCOME")
+      ? orchestrationOutcomeKey(value["resolvedOutcomeKey"]) : null,
     resolvedRevision,
     resolvedFence: state === "RESOLVED" ? orchestrationFenceToken(value["resolvedFence"]) : null,
-  });
+    ...(v2 ? { resolutionKind: value["resolutionKind"] as "EXTERNAL_OUTCOME" | "TERMINAL_NON_SUBMISSION" | null,
+      resolvedAuthorityRef: value["resolvedAuthorityRef"] as string | null } : {}),
+  }) as OrchestrationPendingEffect;
 }
 
 type ExternalTransition = Exclude<ExecutionAttemptRecoveryTransition,

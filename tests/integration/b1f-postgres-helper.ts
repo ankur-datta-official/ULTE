@@ -10,11 +10,13 @@ const migrations = [
   "0003_orchestration_pending_effects_and_outcomes.sql",
   "0004_execution_authority_checkpoint.sql",
   "0005_orchestration_commit_receipts.sql",
+  "0006_terminal_non_submission_persistence.sql",
 ] as const;
 const tables = ["orchestration_recovery_state", "orchestration_recovery_lease",
   "orchestration_pending_effect", "orchestration_external_outcome",
   "orchestration_execution_authority_checkpoint", "orchestration_pending_intent_commit",
-  "orchestration_external_outcome_adoption"] as const;
+  "orchestration_external_outcome_adoption",
+  "orchestration_terminal_non_submission_disposition"] as const;
 const schemaPattern = /^b1f_[0-9a-f]{24}$/;
 const markers = ["receipt:pending-load", "receipt:adoption-load",
   "orchestration-state-store-postgres:lease-lock", "orchestration-state-store-postgres:lease-clock",

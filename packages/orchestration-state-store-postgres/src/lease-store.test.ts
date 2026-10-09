@@ -212,6 +212,19 @@ describe("PostgreSQL recovery lease store", () => {
       .toEqual({ status: "LEASE_LOST" });
   });
 
+  it("continues lease fence synchronization for a terminal recovery row", async () => {
+    const db = new FakePostgres(), leaseStore = store(db);
+    await leaseStore.acquireRecoveryLease(request);
+    db.state = { session_id: sessionId, fence_token: "1", revision: "9",
+      schema_version: "ORCHESTRATION_RECOVERY_RECORD_V2",
+      terminal_non_submission_disposition_ref: "terminal-1" };
+    db.now = 1_100;
+    expect((await leaseStore.acquireRecoveryLease({ ...request, ownerId: ownerB })).status).toBe("ACQUIRED");
+    expect(db.state).toEqual({ session_id: sessionId, fence_token: 2, revision: "9",
+      schema_version: "ORCHESTRATION_RECOVERY_RECORD_V2",
+      terminal_non_submission_disposition_ref: "terminal-1" });
+  });
+
   it("treats expiry for the same owner as a new acquisition", async () => {
     const db = new FakePostgres();
     const leaseStore = store(db);

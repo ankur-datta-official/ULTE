@@ -10,7 +10,8 @@ export interface PendingRow {
   readonly execution_attempt_id: unknown; readonly idempotency_key: unknown;
   readonly request_fingerprint: unknown; readonly created_revision: unknown;
   readonly created_fence: unknown; readonly state: unknown;
-  readonly resolved_outcome_key: unknown; readonly resolved_revision: unknown;
+  readonly resolved_revision: unknown;
+  readonly resolution_kind: unknown; readonly resolved_authority_ref: unknown;
   readonly resolved_fence: unknown;
 }
 
@@ -35,6 +36,12 @@ export function safeEffectBigint(value: unknown, field: string): number {
 
 export function mapPendingRow(row: PendingRow): OrchestrationPendingEffect {
   try {
+    if (row.schema_version === "ORCHESTRATION_PENDING_EFFECT_V1"
+        && (row.resolution_kind !== (row.state === "RESOLVED" ? "EXTERNAL_OUTCOME" : null)
+          || row.resolved_authority_ref === undefined
+          || row.state === "PENDING" && row.resolved_authority_ref !== null)) {
+      throw new TypeError("Invalid V1 pending resolution authority");
+    }
     return createOrchestrationPendingEffect({
       schemaVersion: row.schema_version, sessionId: row.session_id,
       adapterId: row.adapter_id, environment: row.environment, operation: row.operation,
@@ -42,7 +49,10 @@ export function mapPendingRow(row: PendingRow): OrchestrationPendingEffect {
       requestFingerprint: row.request_fingerprint,
       createdRevision: safeEffectBigint(row.created_revision, "created_revision"),
       createdFence: safeEffectBigint(row.created_fence, "created_fence"),
-      state: row.state, resolvedOutcomeKey: row.resolved_outcome_key,
+      state: row.state,
+      resolvedOutcomeKey: row.resolution_kind === "EXTERNAL_OUTCOME" ? row.resolved_authority_ref : null,
+      ...(row.schema_version === "ORCHESTRATION_PENDING_EFFECT_V2"
+        ? { resolutionKind: row.resolution_kind, resolvedAuthorityRef: row.resolved_authority_ref } : {}),
       resolvedRevision: row.resolved_revision === null ? null : safeEffectBigint(row.resolved_revision, "resolved_revision"),
       resolvedFence: row.resolved_fence === null ? null : safeEffectBigint(row.resolved_fence, "resolved_fence"),
     });

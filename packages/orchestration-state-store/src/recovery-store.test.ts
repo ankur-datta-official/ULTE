@@ -44,6 +44,26 @@ const execution = {
 };
 
 describe("durable orchestration recovery contracts", () => {
+  it("maps V1 without terminal authority and requires a canonical terminal V2 ref", () => {
+    const v1 = createOrchestrationRecoveryRecord(execution);
+    expect(v1.schemaVersion).toBe("ORCHESTRATION_RECOVERY_RECORD_V1");
+    expect(v1.terminalNonSubmissionDispositionRef).toBeUndefined();
+    const terminal = createOrchestrationRecoveryRecord({ ...execution,
+      schemaVersion: "ORCHESTRATION_RECOVERY_RECORD_V2",
+      terminalNonSubmissionDispositionRef: "terminal-1" });
+    expect(terminal.terminalNonSubmissionDispositionRef).toBe("terminal-1");
+    expect(terminal.executionAuthorityCheckpointRef).toBe(v1.executionAuthorityCheckpointRef);
+    for (const ref of [undefined, null, "", " terminal-1 "]) {
+      expect(() => createOrchestrationRecoveryRecord({ ...execution,
+        schemaVersion: "ORCHESTRATION_RECOVERY_RECORD_V2",
+        terminalNonSubmissionDispositionRef: ref })).toThrow();
+    }
+    expect(() => createOrchestrationRecoveryRecord({ ...execution,
+      terminalNonSubmissionDispositionRef: "terminal-1" })).toThrow();
+    expect(() => createOrchestrationRecoveryRecord({ ...base,
+      schemaVersion: "ORCHESTRATION_RECOVERY_RECORD_V2",
+      terminalNonSubmissionDispositionRef: "terminal-1" })).toThrow();
+  });
   it("accepts canonical caller-supplied IDs and rejects blank or untrimmed IDs", () => {
     expect(orchestrationSessionId("session-1")).toBe("session-1");
     expect(orchestrationLeaseOwnerId("worker-1")).toBe("worker-1");

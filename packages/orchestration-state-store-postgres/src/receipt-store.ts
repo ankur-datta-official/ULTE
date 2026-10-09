@@ -4,6 +4,8 @@ import {
   orchestrationSessionId, type ExternalOutcomeAdoptionReceipt,
   type OrchestrationOutcomeKey, type OrchestrationPendingEffectIdentity,
   type OrchestrationRevision, type OrchestrationSessionId, type PendingIntentCommitReceipt,
+  terminalNonSubmissionDispositionRef, type TerminalNonSubmissionDispositionReceiptV1,
+  type TerminalNonSubmissionDispositionRef,
 } from "@ulte/orchestration-state-store";
 import { loadExecutionAuthorityCheckpointInTransaction } from "./checkpoint-store.js";
 import { loadOutcomeInTransaction } from "./effect-store.js";
@@ -11,6 +13,52 @@ import { PersistenceCorruptionError, PersistenceInfrastructureError } from "./er
 import { receiptCheckpointRefs, mapAdoptionReceiptRow, mapPendingReceiptRow,
   type AdoptionReceiptRow, type PendingReceiptRow } from "./receipt-mapping.js";
 import type { PostgresExecutor, PostgresQueryResult, PostgresTransaction } from "./postgres.js";
+import { mapTerminalReceiptRow, type TerminalReceiptRow } from "./terminal-receipt-mapping.js";
+
+const TERMINAL_COLUMNS = `schema_version, disposition_ref, session_id, adapter_id, environment,
+ operation, execution_attempt_id, idempotency_key, request_fingerprint, expected_revision,
+ committed_revision, committed_fence, committing_owner_id, unchanged_checkpoint_ref,
+ source_event_ref, observed_at_ms, proof_payload, commit_payload`;
+const TERMINAL_LOAD_REF = `/* receipt:terminal-ref-load */ SELECT ${TERMINAL_COLUMNS}
+ FROM orchestration_terminal_non_submission_disposition WHERE disposition_ref = $1`;
+const TERMINAL_LOAD_SESSION = `/* receipt:terminal-session-load */ SELECT ${TERMINAL_COLUMNS}
+ FROM orchestration_terminal_non_submission_disposition WHERE session_id = $1`;
+const TERMINAL_LOAD_IDENTITY = `/* receipt:terminal-identity-load */ SELECT ${TERMINAL_COLUMNS}
+ FROM orchestration_terminal_non_submission_disposition
+ WHERE adapter_id = $1 AND environment = $2 AND idempotency_key = $3`;
+
+async function terminalReceipt(db: PostgresTransaction, sql: string, params: readonly unknown[]):
+  Promise<TerminalNonSubmissionDispositionReceiptV1 | null> {
+  const row = atMostOne(await db.query<TerminalReceiptRow>(sql, params), "Terminal receipt load");
+  if (row === null) return null;
+  const receipt = mapTerminalReceiptRow(row);
+  const d = receipt.disposition;
+  if (sql === TERMINAL_LOAD_REF && d.dispositionRef !== params[0]
+      || sql === TERMINAL_LOAD_SESSION && d.sessionId !== params[0]
+      || sql === TERMINAL_LOAD_IDENTITY && (d.pendingEffectIdentity.adapterId !== params[0]
+        || d.pendingEffectIdentity.environment !== params[1]
+        || d.pendingEffectIdentity.idempotencyKey !== params[2])) {
+    throw new PersistenceCorruptionError("Terminal receipt lookup scope mismatch");
+  }
+  return receipt;
+}
+
+/** Historical read only; no lease or commit authority. */
+export function loadTerminalNonSubmissionDispositionReceiptInTransaction(db: PostgresTransaction,
+  ref: TerminalNonSubmissionDispositionRef): Promise<TerminalNonSubmissionDispositionReceiptV1 | null> {
+  return infrastructure(() => terminalReceipt(db, TERMINAL_LOAD_REF, [terminalNonSubmissionDispositionRef(ref)]));
+}
+export function loadTerminalNonSubmissionDispositionReceiptBySessionInTransaction(db: PostgresTransaction,
+  sessionId: OrchestrationSessionId): Promise<TerminalNonSubmissionDispositionReceiptV1 | null> {
+  return infrastructure(() => terminalReceipt(db, TERMINAL_LOAD_SESSION, [orchestrationSessionId(sessionId)]));
+}
+export function loadTerminalNonSubmissionDispositionReceiptByIdentityInTransaction(db: PostgresTransaction,
+  adapterId: string, environment: "DRY_RUN" | "SANDBOX", idempotencyKey: string):
+  Promise<TerminalNonSubmissionDispositionReceiptV1 | null> {
+  if (environment !== "DRY_RUN" && environment !== "SANDBOX") throw new TypeError("Invalid environment");
+  return infrastructure(() => terminalReceipt(db, TERMINAL_LOAD_IDENTITY,
+    [key(adapterId, "adapterId"), environment, key(idempotencyKey, "idempotencyKey")]));
+}
 
 const PENDING_COLUMNS = `schema_version, adapter_id, idempotency_key, session_id, expected_revision,
  committed_revision, committed_fence, committing_owner_id, previous_checkpoint_ref,
@@ -199,6 +247,20 @@ export function appendExternalOutcomeAdoptionReceiptInTransaction(db: PostgresTr
 
 export class PostgresOrchestrationReceiptStore {
   public constructor(private readonly executor: PostgresExecutor) {}
+  public loadTerminalNonSubmissionDispositionReceipt(ref: TerminalNonSubmissionDispositionRef):
+    Promise<TerminalNonSubmissionDispositionReceiptV1 | null> {
+    return loadTerminalNonSubmissionDispositionReceiptInTransaction(this.executor, ref);
+  }
+  public loadTerminalNonSubmissionDispositionReceiptBySession(sessionId: OrchestrationSessionId):
+    Promise<TerminalNonSubmissionDispositionReceiptV1 | null> {
+    return loadTerminalNonSubmissionDispositionReceiptBySessionInTransaction(this.executor, sessionId);
+  }
+  public loadTerminalNonSubmissionDispositionReceiptByIdentity(adapterId: string,
+    environment: "DRY_RUN" | "SANDBOX", idempotencyKey: string):
+    Promise<TerminalNonSubmissionDispositionReceiptV1 | null> {
+    return loadTerminalNonSubmissionDispositionReceiptByIdentityInTransaction(this.executor,
+      adapterId, environment, idempotencyKey);
+  }
   public loadPendingIntentCommitReceipt(adapterId: string, idempotencyKey: string): Promise<PendingIntentCommitReceipt | null> {
     return loadPendingIntentCommitReceiptInTransaction(this.executor, adapterId, idempotencyKey);
   }

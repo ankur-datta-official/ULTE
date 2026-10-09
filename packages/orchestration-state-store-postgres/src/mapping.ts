@@ -19,6 +19,7 @@ export interface RecoveryRow {
   readonly execution_instrument_id: unknown;
   readonly risk_basis_checkpoint_ref: unknown;
   readonly latest_r_outcome_ref: unknown;
+  readonly terminal_non_submission_disposition_ref: unknown;
 }
 
 function safeBigint(value: unknown, field: string): number {
@@ -54,6 +55,9 @@ export function mapRecoveryRow(row: RecoveryRow): OrchestrationRecoveryRecord {
       executionAuthorityIdentity: identity,
       riskBasisCheckpointRef: row.risk_basis_checkpoint_ref,
       latestROutcomeRef: row.latest_r_outcome_ref,
+      ...(row.schema_version === "ORCHESTRATION_RECOVERY_RECORD_V2"
+        ? { terminalNonSubmissionDispositionRef: row.terminal_non_submission_disposition_ref }
+        : row.terminal_non_submission_disposition_ref === null ? {} : { terminalNonSubmissionDispositionRef: row.terminal_non_submission_disposition_ref }),
     });
   } catch (cause) {
     throw new PersistenceCorruptionError("Invalid orchestration recovery row", { cause });

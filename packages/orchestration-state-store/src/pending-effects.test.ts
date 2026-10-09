@@ -27,6 +27,27 @@ const outcome = {
 };
 
 describe("pending effects and external outcomes", () => {
+  it("represents terminal V2 resolution without an outcome-key alias", () => {
+    const unresolved = createOrchestrationPendingEffect({ ...pending,
+      schemaVersion: "ORCHESTRATION_PENDING_EFFECT_V2",
+      resolutionKind: null, resolvedAuthorityRef: null });
+    expect(unresolved.resolvedOutcomeKey).toBeNull();
+    const external = createOrchestrationPendingEffect({ ...pending,
+      schemaVersion: "ORCHESTRATION_PENDING_EFFECT_V2", state: "RESOLVED",
+      resolutionKind: "EXTERNAL_OUTCOME", resolvedAuthorityRef: "outcome-1",
+      resolvedOutcomeKey: "outcome-1", resolvedRevision: 3, resolvedFence: 2 });
+    expect(external.resolvedOutcomeKey).toBe("outcome-1");
+    const terminal = createOrchestrationPendingEffect({ ...pending,
+      schemaVersion: "ORCHESTRATION_PENDING_EFFECT_V2", state: "RESOLVED",
+      resolutionKind: "TERMINAL_NON_SUBMISSION", resolvedAuthorityRef: "terminal-1",
+      resolvedRevision: 3, resolvedFence: 2 });
+    expect(terminal.resolvedAuthorityRef).toBe("terminal-1");
+    expect(terminal.resolvedOutcomeKey).toBeNull();
+    expect(() => createOrchestrationPendingEffect({ ...terminal,
+      resolvedOutcomeKey: "terminal-1" })).toThrow();
+    expect(() => createOrchestrationPendingEffect({ ...pending,
+      schemaVersion: "ORCHESTRATION_PENDING_EFFECT_V2" })).toThrow();
+  });
   it("accepts only Phase33 recovery environments for pending identities and records", () => {
     for (const environment of ["DRY_RUN", "SANDBOX"]) {
       expect(createOrchestrationPendingEffectIdentity({ ...identity, environment }).environment).toBe(environment);

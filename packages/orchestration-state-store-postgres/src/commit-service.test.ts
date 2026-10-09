@@ -84,13 +84,14 @@ function recoveryRow(ref: string): Row {
     execution_authority_checkpoint_ref: ref, execution_attempt_id: base.identity.executionAttemptId,
     execution_plan_id: base.identity.executionPlanId, trade_intent_id: base.identity.tradeIntentId,
     candidate_id: base.identity.candidateId, execution_instrument_id: base.identity.instrumentId,
-    risk_basis_checkpoint_ref: null, latest_r_outcome_ref: null };
+    risk_basis_checkpoint_ref: null, latest_r_outcome_ref: null,
+    terminal_non_submission_disposition_ref: null };
 }
 const checkpointFields = ["schema_version", "checkpoint_ref", "evidence_schema_version", "execution_attempt_id",
   "execution_plan_id", "trade_intent_id", "candidate_id", "instrument_id", "evidence_payload"];
 const pendingFields = ["schema_version", "session_id", "adapter_id", "environment", "operation",
   "execution_attempt_id", "idempotency_key", "request_fingerprint", "created_revision", "created_fence",
-  "state", "resolved_outcome_key", "resolved_revision", "resolved_fence"];
+  "state", "resolution_kind", "resolved_authority_ref", "resolved_revision", "resolved_fence"];
 const receiptFields = ["schema_version", "adapter_id", "idempotency_key", "session_id", "expected_revision",
   "committed_revision", "committed_fence", "committing_owner_id", "previous_checkpoint_ref",
   "committed_checkpoint_ref", "commit_payload"];
@@ -216,7 +217,8 @@ class FakePostgres implements PostgresExecutor {
     if (name === "effect:pending-resolve") {
       if (this.conflictAt === name) return result<T>([]);
       if (!this.pending || this.pending["idempotency_key"] !== params[1]) return result<T>([]);
-      this.pending = { ...this.pending, state: "RESOLVED", resolved_outcome_key: params[2],
+      this.pending = { ...this.pending, state: "RESOLVED", resolution_kind: "EXTERNAL_OUTCOME",
+        resolved_authority_ref: params[2],
         resolved_revision: String(params[3]), resolved_fence: String(params[4]) };
       return result<T>([this.pending]);
     }
@@ -247,6 +249,15 @@ class FakePostgres implements PostgresExecutor {
 }
 
 describe("atomic pending-intent commit", () => {
+  it("refuses a fresh pending intent on terminal recovery", async () => {
+    const { previous, request } = fixture(), db = new FakePostgres(previous);
+    db.recovery = { ...db.recovery, schema_version: "ORCHESTRATION_RECOVERY_RECORD_V2",
+      terminal_non_submission_disposition_ref: "terminal-1" };
+    await expect(new PostgresOrchestrationCommitService(db).commitPendingIntent(request))
+      .rejects.toMatchObject({ code: "TERMINAL_STATE_CONFLICT" });
+    expect(db.pending).toBeNull();
+    expect(db.calls).not.toContain("checkpoint:insert");
+  });
   for (const kind of ["entry", "protection", "cancellation"] as const) {
     it(`commits ${kind} checkpoint, pending effect, recovery and receipt together`, async () => {
       const { previous, request } = fixture(kind), db = new FakePostgres(previous);
@@ -272,7 +283,8 @@ describe("atomic pending-intent commit", () => {
     const first = await service.commitPendingIntent(request);
     expect(first.status).toBe("COMMITTED");
     db.recovery = { ...db.recovery, revision: "9" };
-    db.pending = { ...db.pending, state: "RESOLVED", resolved_outcome_key: "outcome-1",
+    db.pending = { ...db.pending, state: "RESOLVED", resolution_kind: "EXTERNAL_OUTCOME",
+      resolved_authority_ref: "outcome-1",
       resolved_revision: "3", resolved_fence: "4" };
     db.lease = null;
     db.calls = [];
@@ -365,7 +377,7 @@ describe("atomic pending-intent commit", () => {
         request.pendingEffect.schemaVersion, request.sessionId, request.pendingEffect.adapterId,
         request.pendingEffect.environment, request.pendingEffect.operation,
         request.pendingEffect.executionAttemptId, request.pendingEffect.idempotencyKey,
-        "different", 2, 3, "PENDING", null, null, null]) };
+        "different", 2, 3, "PENDING", null, null, null, null]) };
       const answer = await new PostgresOrchestrationCommitService(db).commitPendingIntent(request).catch((error: unknown) => error);
       expect(answer).toEqual({ status: "EFFECT_CONFLICT" });
       expect(db.checkpoints.size).toBe(1); expect(db.recovery?.["revision"]).toBe("1");
@@ -375,7 +387,7 @@ describe("atomic pending-intent commit", () => {
       request.sessionId, request.pendingEffect.adapterId, request.pendingEffect.environment,
       request.pendingEffect.operation, request.pendingEffect.executionAttemptId,
       request.pendingEffect.idempotencyKey, request.pendingEffect.requestFingerprint,
-      2, 3, "PENDING", null, null, null]);
+      2, 3, "PENDING", null, null, null, null]);
     await expect(new PostgresOrchestrationCommitService(duplicate).commitPendingIntent(request))
       .rejects.toBeInstanceOf(PersistenceCorruptionError);
     expect(duplicate.checkpoints.size).toBe(1); expect(duplicate.pending).toBeNull();
@@ -507,12 +519,21 @@ function adoptionFixture(kind: "ack" | "rejection" | "fill" | "fill-next" = "ack
   db.outcome = outcomeRow(outcome);
   if (pending) db.pending = row(pendingFields, [pending.schemaVersion, pending.sessionId,
     pending.adapterId, pending.environment, pending.operation, pending.executionAttemptId,
-    pending.idempotencyKey, pending.requestFingerprint, "1", "3", "PENDING", null, null, null]);
+    pending.idempotencyKey, pending.requestFingerprint, "1", "3", "PENDING", null, null, null, null]);
   db.recovery = { ...db.recovery, risk_basis_checkpoint_ref: "risk-1", latest_r_outcome_ref: "r-1" };
   return { db, request, previous, outcome };
 }
 
 describe("atomic outcome adoption", () => {
+  it("refuses a fresh adoption on terminal recovery", async () => {
+    const { db, request } = adoptionFixture();
+    db.recovery = { ...db.recovery, schema_version: "ORCHESTRATION_RECOVERY_RECORD_V2",
+      terminal_non_submission_disposition_ref: "terminal-1" };
+    await expect(new PostgresOrchestrationCommitService(db).adoptOutcome(request))
+      .rejects.toMatchObject({ code: "TERMINAL_STATE_CONFLICT" });
+    expect(db.calls).not.toContain("checkpoint:insert");
+    expect(db.calls).not.toContain("effect:pending-resolve");
+  });
   for (const kind of ["ack", "rejection", "fill", "fill-next"] as const) {
     it(`adopts ${kind} and its exact durable witness`, async () => {
       const { db, request } = adoptionFixture(kind);
@@ -610,7 +631,8 @@ describe("atomic outcome adoption", () => {
       (db: FakePostgres) => { db.recovery = { ...db.recovery, fence_token: "4" }; },
       (db: FakePostgres) => { db.pending = null; },
       (db: FakePostgres) => { db.pending = { ...db.pending, state: "RESOLVED",
-        resolved_outcome_key: "outcome-ack", resolved_revision: "2", resolved_fence: "3" }; },
+        resolution_kind: "EXTERNAL_OUTCOME", resolved_authority_ref: "outcome-ack",
+        resolved_revision: "2", resolved_fence: "3" }; },
       (db: FakePostgres) => { db.pending = { ...db.pending, request_fingerprint: "different" }; },
     ]) {
       const { db, request } = adoptionFixture(); change(db);
@@ -648,7 +670,8 @@ describe("atomic outcome adoption", () => {
     const { db, request } = adoptionFixture("fill-next");
     const service = new PostgresOrchestrationCommitService(db);
     expect((await service.adoptOutcome(request)).status).toBe("ADOPTED");
-    db.pending = { ...db.pending, state: "RESOLVED", resolved_outcome_key: "later",
+    db.pending = { ...db.pending, state: "RESOLVED", resolution_kind: "EXTERNAL_OUTCOME",
+      resolved_authority_ref: "later",
       resolved_revision: "3", resolved_fence: "4" };
     db.lease = { session_id: "session-1", owner_id: "new-owner", fence_token: "4", expires_at_ms: "3000" };
     db.calls = [];
@@ -691,7 +714,7 @@ describe("atomic outcome adoption", () => {
       next.db.pending = row(pendingFields, ["ORCHESTRATION_PENDING_EFFECT_V1", next.request.sessionId,
         identity.adapterId, identity.environment, identity.operation, identity.executionAttemptId,
         identity.idempotencyKey, same ? identity.requestFingerprint : "different", "2", "3",
-        "PENDING", null, null, null]);
+        "PENDING", null, null, null, null]);
       if (same) {
         await expect(new PostgresOrchestrationCommitService(next.db).adoptOutcome(next.request))
           .rejects.toBeInstanceOf(PersistenceCorruptionError);
@@ -771,7 +794,7 @@ describe("atomic outcome adoption", () => {
     const identity = race.request.nextPendingEffectIdentity!;
     race.db.pendingOnInsert = row(pendingFields, ["ORCHESTRATION_PENDING_EFFECT_V1", race.request.sessionId,
       identity.adapterId, identity.environment, identity.operation, identity.executionAttemptId,
-      identity.idempotencyKey, identity.requestFingerprint, "2", "3", "PENDING", null, null, null]);
+      identity.idempotencyKey, identity.requestFingerprint, "2", "3", "PENDING", null, null, null, null]);
     expect(await new PostgresOrchestrationCommitService(race.db).adoptOutcome(race.request))
       .toEqual({ status: "EFFECT_CONFLICT" });
     expect(race.db.checkpoints.size).toBe(1);
@@ -781,7 +804,7 @@ describe("atomic outcome adoption", () => {
     collision.db.pendingOnInsert = row(pendingFields, ["ORCHESTRATION_PENDING_EFFECT_V1",
       collision.request.sessionId, collisionIdentity.adapterId, collisionIdentity.environment,
       collisionIdentity.operation, collisionIdentity.executionAttemptId, collisionIdentity.idempotencyKey,
-      "different", "2", "3", "PENDING", null, null, null]);
+      "different", "2", "3", "PENDING", null, null, null, null]);
     expect(await new PostgresOrchestrationCommitService(collision.db).adoptOutcome(collision.request))
       .toEqual({ status: "EFFECT_CONFLICT" });
     expect(collision.db.checkpoints.size).toBe(1);

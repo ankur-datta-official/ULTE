@@ -55,8 +55,9 @@ describe("root migration coordinator", () => {
       "ORCHESTRATION/0001_orchestration_recovery_state.sql", "ORCHESTRATION/0002_orchestration_recovery_lease.sql",
       "ORCHESTRATION/0003_orchestration_pending_effects_and_outcomes.sql", "ORCHESTRATION/0004_execution_authority_checkpoint.sql",
       "ORCHESTRATION/0005_orchestration_commit_receipts.sql",
+      "ORCHESTRATION/0006_terminal_non_submission_persistence.sql",
     ]);
-    expect(MIGRATION_MANIFEST.map((d) => d.position)).toEqual([1, 2, 1, 2, 3, 4, 5]);
+    expect(MIGRATION_MANIFEST.map((d) => d.position)).toEqual([1, 2, 1, 2, 3, 4, 5, 6]);
     const loaded = await loadMigrations();
     expect(loaded.map((d) => d.digest)).toEqual(loaded.map((d) => digestSql(d.sql)));
     expect(loaded.every((d) => d.sql.trim().length > 0)).toBe(true);
@@ -68,9 +69,9 @@ describe("root migration coordinator", () => {
     const client = new FakeClient();
     const loaded = await loadMigrations();
     const run = await runMigrations(source(client), target);
-    expect(run.applied).toHaveLength(7);
+    expect(run.applied).toHaveLength(8);
     expect(run.skipped).toEqual([]);
-    expect(client.sqlFiles.size).toBe(7);
+    expect(client.sqlFiles.size).toBe(8);
     expect(client.calls.findIndex((s) => s.includes("pg_advisory_lock")))
       .toBeLessThan(client.calls.findIndex((s) => s.includes("c.relname = 'ulte_schema_migrations'")));
     for (const d of loaded) {
@@ -90,7 +91,7 @@ describe("root migration coordinator", () => {
     client.calls.length = 0;
     client.sqlFiles.clear();
     const replay = await runMigrations(source(client), target);
-    expect(replay.skipped).toHaveLength(7);
+    expect(replay.skipped).toHaveLength(8);
     expect(client.sqlFiles.size).toBe(0);
     client.ledger.get("EXECUTION/0001_execution_store.sql")!.digest = digestSql("changed");
     await expect(runMigrations(source(client), target)).rejects.toSatisfy((e: unknown) =>
@@ -111,7 +112,7 @@ describe("root migration coordinator", () => {
     client.calls.length = 0;
     const resumed = await runMigrations(source(client), target);
     expect(resumed.skipped).toHaveLength(2);
-    expect(resumed.applied).toHaveLength(5);
+    expect(resumed.applied).toHaveLength(6);
     expect(client.calls).not.toContain(migrations[0]!.sql);
   });
 
@@ -132,7 +133,7 @@ describe("root migration coordinator", () => {
   it("keeps terminal persistence disabled with no enable override", () => {
     expect(terminalSchemaCapability()).toEqual({
       capability: "TERMINAL_NON_SUBMISSION_PERSISTENCE", status: "DISABLED",
-      reasons: ["ORCHESTRATION_0006_ABSENT", "INTEGRATION_0001_ABSENT", "TERMINAL_CATALOG_UNVERIFIED"],
+      reasons: ["INTEGRATION_0001_ABSENT", "TERMINAL_CATALOG_UNVERIFIED"],
     });
     expect(Object.keys(terminalSchemaCapability())).not.toContain("enabled");
     expect(runMigrations.length).toBe(2);

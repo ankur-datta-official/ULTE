@@ -77,7 +77,7 @@ function pendingRow(value = pending): Row {
     environment: value.environment, operation: value.operation, execution_attempt_id: value.executionAttemptId,
     idempotency_key: value.idempotencyKey, request_fingerprint: value.requestFingerprint,
     created_revision: value.createdRevision, created_fence: value.createdFence, state: value.state,
-    resolved_outcome_key: null, resolved_revision: null, resolved_fence: null };
+    resolution_kind: null, resolved_authority_ref: null, resolved_revision: null, resolved_fence: null };
 }
 function outcomeRow(value: OrchestrationExternalOutcome): Row {
   const id = value.pendingEffectIdentity;
@@ -102,7 +102,7 @@ class Fake implements PostgresExecutor {
     execution_attempt_id: evidence.identity.executionAttemptId, execution_plan_id: evidence.identity.executionPlanId,
     trade_intent_id: evidence.identity.tradeIntentId, candidate_id: evidence.identity.candidateId,
     execution_instrument_id: evidence.identity.instrumentId, risk_basis_checkpoint_ref: null,
-    latest_r_outcome_ref: null };
+    latest_r_outcome_ref: null, terminal_non_submission_disposition_ref: null };
   public effect: Row | null = pendingRow();
   public proof: Row | null = { schema_version: receipt.schemaVersion, adapter_id: pending.adapterId,
     idempotency_key: pending.idempotencyKey, session_id: pending.sessionId,
@@ -188,6 +188,27 @@ class Fake implements PostgresExecutor {
 function service(db: Fake) { return new PostgresOrchestrationFencedWriterService(db); }
 
 describe("fenced recoverable writer", () => {
+  it("blocks every fresh writer path for a terminal recovery before pending or idempotency I/O", async () => {
+    const db = new Fake();
+    db.recovery = { ...db.recovery, schema_version: "ORCHESTRATION_RECOVERY_RECORD_V2",
+      terminal_non_submission_disposition_ref: "terminal-1" };
+    const writer = service(db);
+    const unknownUpdate = { ...confirmed, status: "OUTCOME_UNKNOWN" as const,
+      adapterOrderId: undefined };
+    const actions = [
+      () => writer.claimPendingIdempotency({ ...authority, claim }),
+      () => writer.recordPendingIdempotencyOutcome({ ...authority, update: confirmed }),
+      () => writer.appendPendingOutcome({ ...authority, outcome: outcome() }),
+      () => writer.persistPendingTerminalOutcome({ ...authority, update: confirmed, outcome: outcome() }),
+      () => writer.persistPendingReconciliationObservation({ ...authority, update: unknownUpdate, outcome: null }),
+    ];
+    for (const action of actions) {
+      expect(await action()).toEqual({ status: "TERMINAL_STATE_CONFLICT" });
+    }
+    expect(db.calls).not.toContain("effect:pending-load");
+    expect(db.calls).not.toContain("execution-store-postgres:claim-insert");
+    expect(db.calls).not.toContain("effect:outcome-insert");
+  });
   it("claims under current authority, repeats exactly, and uses one transaction in lock order", async () => {
     const db = new Fake();
     expect((await service(db).claimPendingIdempotency({ ...authority, claim })).status).toBe("PERSISTED");
@@ -209,7 +230,8 @@ describe("fenced recoverable writer", () => {
       [(db: Fake) => { db.recovery = { ...db.recovery, revision: "3" }; }, "REVISION_CONFLICT"],
       [(db: Fake) => { db.recovery = { ...db.recovery, execution_authority_checkpoint_ref: "before" }; }, "CHECKPOINT_CONFLICT"],
       [(db: Fake) => { db.effect = null; }, "PENDING_NOT_FOUND"],
-      [(db: Fake) => { db.effect = { ...db.effect, state: "RESOLVED", resolved_outcome_key: "old",
+      [(db: Fake) => { db.effect = { ...db.effect, state: "RESOLVED", resolution_kind: "EXTERNAL_OUTCOME",
+        resolved_authority_ref: "old",
         resolved_revision: 3, resolved_fence: 3 }; }, "PENDING_IDENTITY_CONFLICT"],
       [(db: Fake) => { db.proof = null; }, "PENDING_CREATION_PROOF_MISSING"],
     ] as const) {

@@ -39,6 +39,7 @@ export interface PendingWriterAuthority {
 }
 export type PendingWriterFailure =
   | Readonly<{ readonly status: "LEASE_LOST" | "RECOVERY_NOT_FOUND" | "CHECKPOINT_CONFLICT"
+      | "TERMINAL_STATE_CONFLICT"
       | "PENDING_NOT_FOUND" | "PENDING_IDENTITY_CONFLICT" | "PENDING_CREATION_PROOF_MISSING"
       | "IDEMPOTENCY_CONFLICT" | "OUTCOME_CONFLICT" }>
   | Readonly<{ readonly status: "FENCE_CONFLICT"; readonly currentFence: OrchestrationFenceToken }>
@@ -132,6 +133,7 @@ async function prefix(tx: PostgresTransaction, request: PendingWriterAuthority):
   if (lease.status !== "ACTIVE") return lease;
   const recovery = await loadRecoveryStateForUpdateInTransaction(tx, request.sessionId);
   if (recovery === null) return failure("RECOVERY_NOT_FOUND");
+  if (recovery.schemaVersion === "ORCHESTRATION_RECOVERY_RECORD_V2") return failure("TERMINAL_STATE_CONFLICT");
   if (recovery.fenceToken !== request.expectedFence) {
     throw new PersistenceCorruptionError("Lease/recovery fence incoherence");
   }

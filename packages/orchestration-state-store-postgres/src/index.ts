@@ -16,6 +16,9 @@ export { PostgresOrchestrationReceiptStore, loadPendingIntentCommitReceiptInTran
   loadExternalOutcomeAdoptionReceiptInTransaction, appendPendingIntentCommitReceiptInTransaction,
   appendExternalOutcomeAdoptionReceiptInTransaction,
   loadAdoptionCreationProofInTransaction } from "./receipt-store.js";
+export { loadTerminalNonSubmissionDispositionReceiptInTransaction,
+  loadTerminalNonSubmissionDispositionReceiptBySessionInTransaction,
+  loadTerminalNonSubmissionDispositionReceiptByIdentityInTransaction } from "./receipt-store.js";
 export type { AdoptionCreationProofLookupResult, ReceiptAppendResult } from "./receipt-store.js";
 export { PersistenceConflictError, PersistenceCorruptionError, PersistenceInfrastructureError } from "./errors.js";
 export type { PostgresExecutor, PostgresQueryResult, PostgresTransaction } from "./postgres.js";

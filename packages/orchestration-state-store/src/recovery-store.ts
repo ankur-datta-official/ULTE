@@ -1,5 +1,6 @@
 import type { ExecutionAttemptRecoveryIdentity } from "@ulte/execution-engine";
 import { instrumentId, type InstrumentId, type UnixMs } from "@ulte/instrument-model";
+import type { TerminalNonSubmissionDispositionRef } from "./terminal-non-submission-disposition.js";
 
 declare const sessionIdBrand: unique symbol;
 declare const revisionBrand: unique symbol;
@@ -68,13 +69,13 @@ export function orchestrationLeaseDurationMs(value: unknown): OrchestrationLease
 }
 
 export const ORCHESTRATION_RECOVERY_RECORD_SCHEMA_VERSION = "ORCHESTRATION_RECOVERY_RECORD_V1" as const;
+export const ORCHESTRATION_RECOVERY_RECORD_V2 = "ORCHESTRATION_RECOVERY_RECORD_V2" as const;
 
 export type OrchestrationRecoveryMode = "DRY_RUN" | "SANDBOX";
 export type ExecutionAuthorityIdentity = ExecutionAttemptRecoveryIdentity;
 
 /** Durable session metadata only. References grant no execution, risk, or R authority. */
-export interface OrchestrationRecoveryRecord {
-  readonly schemaVersion: typeof ORCHESTRATION_RECOVERY_RECORD_SCHEMA_VERSION;
+interface RecoveryRecordBase {
   readonly sessionId: OrchestrationSessionId;
   readonly revision: OrchestrationRevision;
   readonly fenceToken: OrchestrationFenceToken;
@@ -85,6 +86,11 @@ export interface OrchestrationRecoveryRecord {
   readonly riskBasisCheckpointRef: RiskBasisCheckpointId | null;
   readonly latestROutcomeRef: LatestROutcomeId | null;
 }
+export type OrchestrationRecoveryRecord =
+  | Readonly<RecoveryRecordBase & { readonly schemaVersion: typeof ORCHESTRATION_RECOVERY_RECORD_SCHEMA_VERSION;
+      readonly terminalNonSubmissionDispositionRef?: null }>
+  | Readonly<RecoveryRecordBase & { readonly schemaVersion: typeof ORCHESTRATION_RECOVERY_RECORD_V2;
+      readonly terminalNonSubmissionDispositionRef: TerminalNonSubmissionDispositionRef }>;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -121,10 +127,13 @@ function isPlainJson(value: unknown, ancestors: ReadonlySet<object> = new Set())
 
 /** Validate every persisted row before exposing it to a recovery coordinator. */
 export function createOrchestrationRecoveryRecord(value: unknown): OrchestrationRecoveryRecord {
+  const version = isRecord(value) ? value["schemaVersion"] : undefined;
+  const terminal = version === ORCHESTRATION_RECOVERY_RECORD_V2;
   if (!isPlainJson(value) || !isRecord(value) || !exactKeys(value, [
     "schemaVersion", "sessionId", "revision", "fenceToken", "mode", "instrumentId",
     "executionAuthorityCheckpointRef", "executionAuthorityIdentity", "riskBasisCheckpointRef", "latestROutcomeRef",
-  ]) || value["schemaVersion"] !== ORCHESTRATION_RECOVERY_RECORD_SCHEMA_VERSION) {
+    ...(terminal ? ["terminalNonSubmissionDispositionRef"] : []),
+  ]) || (!terminal && version !== ORCHESTRATION_RECOVERY_RECORD_SCHEMA_VERSION)) {
     throw new TypeError("Invalid orchestration recovery record");
   }
   const sessionId = orchestrationSessionId(value["sessionId"]);
@@ -137,6 +146,9 @@ export function createOrchestrationRecoveryRecord(value: unknown): Orchestration
   const identity = value["executionAuthorityIdentity"];
   const risk = value["riskBasisCheckpointRef"];
   const latestR = value["latestROutcomeRef"];
+  const terminalRef = terminal
+    ? identifier(value["terminalNonSubmissionDispositionRef"], "terminalNonSubmissionDispositionRef") : null;
+  if (terminal && checkpoint === null) throw new TypeError("Terminal recovery requires execution checkpoint");
   if ((checkpoint === null) !== (identity === null)) {
     throw new TypeError("Execution checkpoint and identity must appear together");
   }
@@ -160,13 +172,14 @@ export function createOrchestrationRecoveryRecord(value: unknown): Orchestration
     });
   }
   return Object.freeze({
-    schemaVersion: ORCHESTRATION_RECOVERY_RECORD_SCHEMA_VERSION,
+    schemaVersion: terminal ? ORCHESTRATION_RECOVERY_RECORD_V2 : ORCHESTRATION_RECOVERY_RECORD_SCHEMA_VERSION,
     sessionId, revision, fenceToken, mode, instrumentId: canonicalInstrumentId,
     executionAuthorityCheckpointRef: checkpoint === null ? null : executionAuthorityCheckpointId(checkpoint),
     executionAuthorityIdentity,
     riskBasisCheckpointRef: risk === null ? null : riskBasisCheckpointId(risk),
     latestROutcomeRef: latestR === null ? null : latestROutcomeId(latestR),
-  });
+    ...(terminal ? { terminalNonSubmissionDispositionRef: terminalRef! as TerminalNonSubmissionDispositionRef } : {}),
+  }) as OrchestrationRecoveryRecord;
 }
 
 export interface OrchestrationRecoveryState {

@@ -226,6 +226,9 @@ export class PostgresOrchestrationCommitService {
 
         const current = await loadRecoveryStateForUpdateInTransaction(tx, request.sessionId);
         if (current === null) return Object.freeze({ status: "NOT_FOUND" });
+        if (current.schemaVersion === "ORCHESTRATION_RECOVERY_RECORD_V2") {
+          throw new PersistenceConflictError("TERMINAL_STATE_CONFLICT", "Terminal recovery cannot adopt an outcome");
+        }
         if (current.revision !== request.expectedRevision) {
           return Object.freeze({ status: "REVISION_CONFLICT", currentRevision: current.revision });
         }
@@ -375,6 +378,9 @@ export class PostgresOrchestrationCommitService {
 
         const current = await loadRecoveryStateForUpdateInTransaction(tx, request.sessionId);
         if (current === null) return Object.freeze({ status: "NOT_FOUND" });
+        if (current.schemaVersion === "ORCHESTRATION_RECOVERY_RECORD_V2") {
+          throw new PersistenceConflictError("TERMINAL_STATE_CONFLICT", "Terminal recovery cannot commit pending intent");
+        }
         if (current.revision !== request.expectedRevision) {
           return Object.freeze({ status: "REVISION_CONFLICT", currentRevision: current.revision });
         }
