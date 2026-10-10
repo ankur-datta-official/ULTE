@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Pool, type PoolClient } from "pg";
+import { runMigrations, type MigrationTarget } from "../../tools/migration-coordinator/src/index.js";
 import type { PostgresExecutor, PostgresQueryResult, PostgresTransaction } from "../../packages/orchestration-state-store-postgres/src/postgres.js";
 
 const migrations = [
@@ -19,6 +20,8 @@ const tables = ["orchestration_recovery_state", "orchestration_recovery_lease",
   "orchestration_terminal_non_submission_disposition"] as const;
 const schemaPattern = /^b1f_[0-9a-f]{24}$/;
 const markers = ["receipt:pending-load", "receipt:adoption-load",
+  "receipt:terminal-ref-load", "receipt:terminal-insert", "effect:terminal-resolve",
+  "orchestration-state-store-postgres:terminal-update",
   "orchestration-state-store-postgres:lease-lock", "orchestration-state-store-postgres:lease-clock",
   "checkpoint:insert", "effect:pending-load", "effect:pending-resolve",
   "effect:pending-insert", "save-update", "receipt:pending-insert",
@@ -147,7 +150,9 @@ export class B1fDatabase {
     this.observer = new RealPostgresExecutor(this.pool, this.#schema);
   }
 
-  public static async create(): Promise<B1fDatabase> {
+  public get target(): MigrationTarget { return { database: "ulte_b1f_test", schema: this.#schema }; }
+
+  public static async create(coordinated = false): Promise<B1fDatabase> {
     const url = process.env["ULTE_TEST_POSTGRES_URL"];
     if (!url) throw new Error("ULTE_TEST_POSTGRES_URL is required for real PostgreSQL B1F tests");
     let parsed: URL;
@@ -172,9 +177,19 @@ export class B1fDatabase {
         await client.query(`CREATE SCHEMA ${schemaSql(db.#schema)}`);
         db.schemaCreated = true;
         await db.a.bind(client);
-        for (const name of migrations) {
-          const path = fileURLToPath(new URL(`../../packages/orchestration-state-store-postgres/migrations/${name}`, import.meta.url));
-          await client.query(await readFile(path, "utf8"));
+        if (coordinated) {
+          const source = { connect: async () => {
+            const pinned = await db.pool.connect();
+            try { await db.a.bind(pinned); return pinned; }
+            catch (error) { pinned.release(); throw error; }
+          } };
+          const run = await runMigrations(source, db.target);
+          if (run.capability.status !== "VERIFIED") throw new Error("D3 coordinated schema capability unavailable");
+        } else {
+          for (const name of migrations) {
+            const path = fileURLToPath(new URL(`../../packages/orchestration-state-store-postgres/migrations/${name}`, import.meta.url));
+            await client.query(await readFile(path, "utf8"));
+          }
         }
         for (const table of tables) {
           const found = await client.query<{ oid: string | null; namespace: string | null }>(

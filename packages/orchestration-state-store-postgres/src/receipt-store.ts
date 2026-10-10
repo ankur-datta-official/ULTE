@@ -1,5 +1,6 @@
 import {
   createExternalOutcomeAdoptionReceipt, createPendingIntentCommitReceipt,
+  createTerminalNonSubmissionDispositionReceiptV1, equalCanonicalJson,
   createOrchestrationPendingEffectIdentity, orchestrationOutcomeKey, orchestrationRevision,
   orchestrationSessionId, type ExternalOutcomeAdoptionReceipt,
   type OrchestrationOutcomeKey, type OrchestrationPendingEffectIdentity,
@@ -26,6 +27,9 @@ const TERMINAL_LOAD_SESSION = `/* receipt:terminal-session-load */ SELECT ${TERM
 const TERMINAL_LOAD_IDENTITY = `/* receipt:terminal-identity-load */ SELECT ${TERMINAL_COLUMNS}
  FROM orchestration_terminal_non_submission_disposition
  WHERE adapter_id = $1 AND environment = $2 AND idempotency_key = $3`;
+const TERMINAL_INSERT = `/* receipt:terminal-insert */ INSERT INTO orchestration_terminal_non_submission_disposition
+ (${TERMINAL_COLUMNS}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+ ON CONFLICT DO NOTHING RETURNING ${TERMINAL_COLUMNS}`;
 
 async function terminalReceipt(db: PostgresTransaction, sql: string, params: readonly unknown[]):
   Promise<TerminalNonSubmissionDispositionReceiptV1 | null> {
@@ -58,6 +62,35 @@ export function loadTerminalNonSubmissionDispositionReceiptByIdentityInTransacti
   if (environment !== "DRY_RUN" && environment !== "SANDBOX") throw new TypeError("Invalid environment");
   return infrastructure(() => terminalReceipt(db, TERMINAL_LOAD_IDENTITY,
     [key(adapterId, "adapterId"), environment, key(idempotencyKey, "idempotencyKey")]));
+}
+
+/** Append only; a uniqueness race is read back and compared, never treated as blind success. */
+export function appendTerminalNonSubmissionDispositionReceiptInTransaction(db: PostgresTransaction,
+  input: TerminalNonSubmissionDispositionReceiptV1): Promise<ReceiptAppendResult<TerminalNonSubmissionDispositionReceiptV1>> {
+  const receipt = createTerminalNonSubmissionDispositionReceiptV1(input);
+  const d = receipt.disposition, p = d.pendingEffectIdentity;
+  return infrastructure(async () => {
+    const row = atMostOne(await db.query<TerminalReceiptRow>(TERMINAL_INSERT, [
+      receipt.schemaVersion, d.dispositionRef, d.sessionId, p.adapterId, p.environment,
+      p.operation, d.executionAttemptId, p.idempotencyKey, p.requestFingerprint,
+      d.expectedRecoveryRevision, d.committedRevision, d.committedFence, d.committingOwnerId,
+      d.executionAuthorityCheckpointRefBefore, d.proof.sourceEventRef, d.proof.observedAt,
+      JSON.stringify(d.proof), JSON.stringify(receipt),
+    ]), "Terminal receipt insert");
+    if (row !== null) {
+      const stored = mapTerminalReceiptRow(row);
+      if (!equalCanonicalJson(stored, receipt))
+        throw new PersistenceCorruptionError("Terminal receipt insert returned contradictory facts");
+      return Object.freeze({ status: "APPENDED", receipt: stored });
+    }
+    const existing = await terminalReceipt(db, TERMINAL_LOAD_REF, [d.dispositionRef])
+      ?? await terminalReceipt(db, TERMINAL_LOAD_SESSION, [d.sessionId])
+      ?? await terminalReceipt(db, TERMINAL_LOAD_IDENTITY, [p.adapterId, p.environment, p.idempotencyKey]);
+    if (existing === null) throw new PersistenceCorruptionError("Conflicting terminal receipt disappeared");
+    return equalCanonicalJson(existing, receipt)
+      ? Object.freeze({ status: "DUPLICATE_SAME", receipt: existing })
+      : Object.freeze({ status: "RECEIPT_CONFLICT", existing });
+  });
 }
 
 const PENDING_COLUMNS = `schema_version, adapter_id, idempotency_key, session_id, expected_revision,

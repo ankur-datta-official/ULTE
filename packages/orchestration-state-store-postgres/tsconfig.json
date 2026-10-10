@@ -8,6 +8,7 @@
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"],
   "references": [
+    { "path": "../../tools/migration-coordinator" },
     { "path": "../execution-store-postgres" },
     { "path": "../instrument-model" },
     { "path": "../orchestration-state-store" }

@@ -219,6 +219,9 @@ importers:
       '@ulte/instrument-model':
         specifier: workspace:*
         version: link:../instrument-model
+      '@ulte/migration-coordinator':
+        specifier: workspace:*
+        version: link:../../tools/migration-coordinator
       '@ulte/orchestration-state-store':
         specifier: workspace:*
         version: link:../orchestration-state-store
@@ -1215,6 +1218,8 @@ importers:
       '@ulte/position-sizing-engine':
         specifier: workspace:*
         version: link:../position-sizing-engine
+
+  tools/migration-coordinator: {}
 
 packages:
 

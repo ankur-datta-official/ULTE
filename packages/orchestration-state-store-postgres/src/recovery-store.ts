@@ -39,6 +39,14 @@ SET revision = $4, mode = $5, instrument_id = $6,
 WHERE session_id = $1 AND revision = $2 AND fence_token = $3
   AND terminal_non_submission_disposition_ref IS NULL
 RETURNING ${COLUMNS}`;
+const TERMINAL_UPDATE_SQL = `/* orchestration-state-store-postgres:terminal-update */
+UPDATE orchestration_recovery_state
+SET schema_version = 'ORCHESTRATION_RECOVERY_RECORD_V2', revision = $4,
+  terminal_non_submission_disposition_ref = $5
+WHERE session_id = $1 AND revision = $2 AND fence_token = $3
+  AND schema_version = 'ORCHESTRATION_RECOVERY_RECORD_V1'
+  AND terminal_non_submission_disposition_ref IS NULL
+RETURNING ${COLUMNS}`;
 
 function values(record: OrchestrationRecoveryRecord): readonly unknown[] {
   const identity = record.executionAuthorityIdentity;
@@ -161,4 +169,20 @@ export async function saveRecoveryStateInTransaction(transaction: PostgresTransa
     throw new PersistenceConflictError("CONCURRENT_RECOVERY_CONFLICT", "Conditional recovery update returned no single row");
   }
   return saved(updated.rows, candidate.sessionId, nextRevision, candidate.fenceToken);
+}
+
+/** Changes only terminal version, revision and disposition reference on a locked V1 recovery row. */
+export async function commitTerminalRecoveryStateInTransaction(transaction: PostgresTransaction,
+  sessionId: OrchestrationSessionId, revision: number, fence: number, dispositionRef: string):
+  Promise<OrchestrationRecoveryRecord> {
+  const result = await transaction.query<RecoveryRow>(TERMINAL_UPDATE_SQL,
+    [sessionId, revision, fence, revision + 1, dispositionRef]);
+  if (result.rowCount !== 1 || result.rows.length !== 1)
+    throw new PersistenceCorruptionError("Locked terminal recovery CAS updated no single row");
+  const record = mapRecoveryRow(result.rows[0]!);
+  if (record.schemaVersion !== "ORCHESTRATION_RECOVERY_RECORD_V2"
+      || record.sessionId !== sessionId || record.revision !== revision + 1
+      || record.fenceToken !== fence || record.terminalNonSubmissionDispositionRef !== dispositionRef)
+    throw new PersistenceCorruptionError("Terminal recovery CAS returned contradictory facts");
+  return record;
 }

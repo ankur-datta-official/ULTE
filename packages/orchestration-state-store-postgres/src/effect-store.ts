@@ -35,6 +35,16 @@ const PENDING_RESOLVE = `/* effect:pending-resolve */ UPDATE orchestration_pendi
    AND session_id = $6 AND environment = $7 AND operation = $8
    AND execution_attempt_id = $9 AND request_fingerprint = $10
  RETURNING ${PENDING_COLUMNS}`;
+const TERMINAL_RESOLVE = `/* effect:terminal-resolve */ UPDATE orchestration_pending_effect
+ SET schema_version = 'ORCHESTRATION_PENDING_EFFECT_V2', state = 'RESOLVED',
+   resolution_kind = 'TERMINAL_NON_SUBMISSION', resolved_authority_ref = $3,
+   resolved_revision = $4, resolved_fence = $5
+ WHERE adapter_id = $1 AND idempotency_key = $2 AND state = 'PENDING'
+   AND session_id = $6 AND environment = $7 AND operation = $8
+   AND execution_attempt_id = $9 AND request_fingerprint = $10
+   AND resolution_kind IS NULL AND resolved_authority_ref IS NULL
+   AND resolved_revision IS NULL AND resolved_fence IS NULL
+ RETURNING ${PENDING_COLUMNS}`;
 const OUTCOME_LOAD = `/* effect:outcome-load */ SELECT ${OUTCOME_COLUMNS} FROM orchestration_external_outcome WHERE outcome_key = $1`;
 const OUTCOME_LIST = `/* effect:outcome-list */ SELECT ${OUTCOME_COLUMNS} FROM orchestration_external_outcome
  WHERE session_id = $1 AND execution_attempt_id = $2 ORDER BY observed_at_ms ASC, outcome_key ASC`;
@@ -245,6 +255,27 @@ export async function resolvePendingEffectInTransaction(transaction: PostgresTra
       throw new PersistenceCorruptionError("Pending resolution returned contradictory facts");
     return Object.freeze({ status: "RESOLVED", effect: resolved });
   });
+}
+
+/** The caller already holds this pending row under the current fenced recovery transaction. */
+export async function resolveTerminalPendingEffectInTransaction(transaction: PostgresTransaction,
+  input: { readonly sessionId: OrchestrationSessionId;
+    readonly identity: OrchestrationPendingEffectIdentity; readonly dispositionRef: string;
+    readonly revision: number; readonly fence: number }): Promise<OrchestrationPendingEffect> {
+  const identity = createOrchestrationPendingEffectIdentity(input.identity);
+  const row = atMostOne(await transaction.query<PendingRow>(TERMINAL_RESOLVE, [
+    identity.adapterId, identity.idempotencyKey, input.dispositionRef, input.revision, input.fence,
+    input.sessionId, identity.environment, identity.operation, identity.executionAttemptId,
+    identity.requestFingerprint,
+  ]), "Terminal pending resolution");
+  if (row === null) throw new PersistenceCorruptionError("Locked terminal pending resolution updated no row");
+  const effect = mapPendingRow(row);
+  if (effect.sessionId !== input.sessionId || !sameIdentity(effect, identity)
+      || effect.state !== "RESOLVED" || effect.resolutionKind !== "TERMINAL_NON_SUBMISSION"
+      || effect.resolvedAuthorityRef !== input.dispositionRef
+      || effect.resolvedRevision !== input.revision || effect.resolvedFence !== input.fence)
+    throw new PersistenceCorruptionError("Terminal pending resolution returned contradictory facts");
+  return effect;
 }
 
 export class PostgresOrchestrationEffectStore {

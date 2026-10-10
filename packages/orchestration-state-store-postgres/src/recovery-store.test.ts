@@ -135,7 +135,8 @@ describe("Postgres orchestration recovery store", () => {
     expect(await db.transaction((tx) => saveRecoveryStateInTransaction(tx, write())))
       .toEqual({ status: "NOT_FOUND" });
     const source = readFileSync(fileURLToPath(new URL("./recovery-store.ts", import.meta.url)), "utf8");
-    expect(source.match(/UPDATE orchestration_recovery_state/g)).toHaveLength(1);
+    expect(source.match(/UPDATE orchestration_recovery_state/g)).toHaveLength(2);
+    expect(source).toContain("orchestration-state-store-postgres:terminal-update");
     expect(source).toContain("saveRecoveryStateInTransaction(transaction, write)");
   });
 

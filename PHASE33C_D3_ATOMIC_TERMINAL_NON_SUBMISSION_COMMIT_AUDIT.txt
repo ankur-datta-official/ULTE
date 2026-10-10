@@ -1,0 +1,139 @@
+PHASE33C D3 ATOMIC TERMINAL NON-SUBMISSION COMMIT AUDIT
+VERDICT = FINAL PASS
+D3_ATOMIC_TERMINAL_COMMIT = PASS
+SCHEMA_CAPABILITY_GATE = PASS
+FENCE_AUTHORITY = PASS
+FAILED_NOT_SUBMITTED_GATE = PASS
+PENDING_TERMINAL_RESOLUTION = PASS
+RECOVERY_TERMINAL_REF = PASS
+IDEMPOTENT_HISTORICAL_RETRY = PASS
+LOST_COMMIT_RECOVERY = PASS
+ATOMIC_ROLLBACK = PASS
+CONCURRENCY_PROOF = PASS
+IDENTICAL_D3_BLOCKING_RACE = PASS
+CONFLICTING_D3_BLOCKING_RACE = PASS
+D3_VS_OUTCOME_ADOPTION_BLOCKING_RACE = PASS
+DISTINCT_BACKEND_PROOF = PASS
+POSTGRES_BLOCKER_OBSERVED = YES
+
+Baseline HEAD and origin/main: fd7878941657eac619a8a78b28b59588d5abfaf3
+Initial D3 implementation worktree was clean. Task042B started from the 13-modified,
+4-untracked D3 worktree; no files were staged. No git add, commit, push, reset, or migration 0007.
+
+Files changed:
+  packages/orchestration-state-store-postgres/package.json
+  packages/orchestration-state-store-postgres/tsconfig.json
+  packages/orchestration-state-store-postgres/src/terminal-commit-service.ts
+  packages/orchestration-state-store-postgres/src/terminal-commit-service.test.ts
+  packages/orchestration-state-store-postgres/src/index.ts
+  packages/orchestration-state-store-postgres/src/receipt-store.ts
+  packages/orchestration-state-store-postgres/src/effect-store.ts
+  packages/orchestration-state-store-postgres/src/recovery-store.ts
+  packages/orchestration-state-store-postgres/src/recovery-store.test.ts
+  tools/migration-coordinator/package.json
+  tools/migration-coordinator/src/index.ts
+  pnpm-workspace.yaml
+  pnpm-lock.yaml
+  tests/integration/b1f-postgres-helper.ts
+  tests/integration/d3-postgres.test.ts
+  vitest.postgres.config.ts
+  PHASE33C_D3_ATOMIC_TERMINAL_NON_SUBMISSION_COMMIT_AUDIT.txt
+
+Public API: PostgresTerminalNonSubmissionCommitService.commitTerminalNonSubmissionDisposition,
+CommitTerminalNonSubmissionDispositionRequest, TerminalCommitResult, TerminalCommitError,
+TerminalCommitFailureCode. The migration coordinator also exports
+verifyTerminalSchemaCapabilityOnClient for a caller-owned pinned transaction connection.
+
+Transaction: BEGIN; verify the complete D2C ledger/catalog capability and exact
+database/schema/search_path on this transaction connection; read terminal receipt by
+disposition ref, session, and exact broker identity; validate historical retry if found;
+lock and check lease using database time; recheck receipt after lease serialization;
+lock recovery and validate revision, fence, checkpoint and frozen authority;
+lock linked pending effect and validate its creation receipt and checkpoint ancestry;
+lock exact broker idempotency row; require FAILED_NOT_SUBMITTED and no adapter order ID;
+reject linked canonical outcome and ambiguous or accepted/rejected broker disposition;
+insert immutable terminal receipt; resolve pending as
+TERMINAL_NON_SUBMISSION with disposition ref, committed revision and unchanged fence;
+CAS recovery to V2 with revision +1 and terminal ref only; check unchanged authority;
+recheck lease at database time; COMMIT. No provider or broker I/O is performed.
+
+Global lock order follows existing fenced writers: lease, recovery, pending, broker,
+receipt. Creation receipt/checkpoint and outcome reads do not lock. The early receipt
+lookup is a read; the post-lease recheck converges concurrent identical callers.
+
+Task042A final source audit found the original concurrency proof insufficient. The
+identical and conflicting Promise.all tests could pass through sequential execution;
+the old adoption case seeded a linked canonical outcome that independently rejected
+D3 before any race. Task042B hardened tests only. A's afterQuery hook pauses immediately
+after the real lease SELECT FOR UPDATE while its physical transaction retains that row
+lock. B's beforeQuery hook proves the conflicting lease SELECT FOR UPDATE is issued on
+a different backend. The observer calls pg_blocking_pids(B_PID), requires A_PID among
+the blockers, and verifies its own backend differs from both workers before A is
+released. All barriers are bounded and hooks are cleared in finally blocks.
+
+Identical D3 race: A returns COMMITTED; B returns ALREADY_COMMITTED. Conflicting D3
+race: A returns COMMITTED; B returns RECEIPT_CONFLICT. Each leaves one immutable
+receipt, one terminal pending resolution, one recovery revision advance and the exact
+terminal reference.
+
+LEGAL_D3_ADOPTION_RACE = YES. A definite non-submitted entry cancellation can be
+closed while an unlinked entry fill is independently adoptable. The revised test
+starts from this coherent state, proves the adoption checkpoint advance with the
+domain authority proof, then observes adoption's lease query blocked behind D3's
+lease row lock. D3 commits; adoption deterministically fails TERMINAL_STATE_CONFLICT.
+The final database contains only terminal authority, with no adoption receipt or
+mixed recovery state. The old pre-existing linked-outcome race claim is superseded.
+
+Fresh writes require current lease owner, exact DB-issued fence, nonexpired lease,
+and lease/recovery fence synchronization. The final check rolls back all writes on
+expiry. Historical retries compare the complete D1 logical payload and ignore the
+current owner/fence, as required by the frozen D1 contract. Conflicting reuse fails.
+
+The exact broker triple is adapter_id, environment, idempotency_key. The broker row
+must match operation, attempt and fingerprint and be FAILED_NOT_SUBMITTED. No status
+transition, retry authorization, or canonical rejection is invented. The current D1/D2
+contracts separate normal-flow status persistence from historical D3 closure; this API
+closes the already durable FAILED_NOT_SUBMITTED + PENDING state.
+
+Fresh real PostgreSQL D3 after Task042B final test edits: 17/17 PASS. Includes closure,
+immutable receipt, historical retry,
+lost COMMIT response and no second revision advance, conflicting retry, capability
+loss and wrong topology, stale/taken-over/expired lease, missing broker row,
+nonterminal broker status,
+already resolved pending, rollback after receipt/pending/recovery writes, identical
+and conflicting concurrent commits, linked canonical outcome, contradictory broker
+dispositions, and deterministic outcome-adoption blocking without mixed terminal authority.
+
+Task042B affected focused PostgreSQL store and migration coordinator tests: 125/125
+PASS, including D3 focused 1/1. Root TypeScript build: PASS. PostgreSQL test
+typecheck: PASS. git diff --check: PASS. Prior D3 implementation verification:
+184/184 focused/domain/store/migration, D2C real 8/8, B1F real 15/15 PASS.
+Task042B attempted the combined 40-test real suite, but PostgreSQL received an
+external fast-shutdown request during B1F P4 after 3 B1F tests passed; subsequent
+tests could not connect. That interrupted run is not counted as a regression result.
+The B1F helper and D2C migration/capability infrastructure were not changed by
+Task042B, so their prior verified counts remain historical. The complete D3 suite
+was rerun separately after the final test edit and passed 17/17.
+REAL_POSTGRES_VERIFIED for current D3 source = YES.
+
+Real environment: WSL2 PostgreSQL 18.6, ulte_b1f_test and non-superuser ulte_test.
+The credential-free, dynamically addressed, narrow /32 test auth bridge was used.
+The first short run revealed HBA rule precedence and restored the original bytes.
+The combined run's external WSL restart erased its /tmp backup; the exact temporary
+rule was removed and the original SHA-256 verified before further work. Final D3
+rerun used a /var/tmp backup and ended with byte-exact SHA-256 restoration, PostgreSQL
+reload, and proof that the temporary trust rule is absent. No password, credential,
+address, or local bridge script was placed in this repository.
+
+Source review: Task042B changed only this audit and d3-postgres.test.ts; no production
+semantic change or shared helper edit. No migration 0007, broker I/O, provider I/O, fabricated canonical
+rejection, retry authorization, frontend secret, hardcoded connection URL, WSL address,
+or password. All D3 writes occur inside one physical PostgreSQL transaction. No
+production ready activation or runtime cutover is included.
+
+Non-goals: D4 boot activation, C2B3 runtime cutover, D5 exhaustive races, canonical
+reconciliation rejection, and composition of the broker status transition into D3.
+
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+Commit/push = none

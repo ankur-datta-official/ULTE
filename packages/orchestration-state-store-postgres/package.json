@@ -14,6 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ulte/migration-coordinator": "workspace:*",
     "@ulte/execution-store-postgres": "workspace:*",
     "@ulte/instrument-model": "workspace:*",
     "@ulte/orchestration-state-store": "workspace:*"

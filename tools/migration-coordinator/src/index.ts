@@ -311,6 +311,12 @@ export async function verifyTerminalSchemaCapability(source: MigrationConnection
   finally { client.release(); }
 }
 
+/** Verify the D2C capability on the caller's pinned transaction connection. */
+export async function verifyTerminalSchemaCapabilityOnClient(client: PinnedMigrationClient,
+  target: MigrationTarget): Promise<TerminalSchemaCapability> {
+  return inspectTerminalSchemaCapability(client, target, await loadMigrations());
+}
+
 /** Caller supplies explicit target and owns the connection source; this function releases the client. */
 export async function runMigrations(
   source: MigrationConnectionSource, target: MigrationTarget,
