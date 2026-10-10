@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.postgres.json",
+  "include": ["tests/integration/d5-postgres.test.ts"]
+}

@@ -33,7 +33,9 @@ async function creationProof(tx: PostgresTransaction, effect: OrchestrationPendi
   const pending = await loadPendingIntentCommitReceiptInTransaction(tx, effect.adapterId, effect.idempotencyKey);
   if (pending !== null) return { kind: "PENDING_INTENT_COMMIT", receipt: pending };
   const adoption = await loadAdoptionCreationProofInTransaction(tx, effect.sessionId,
-    effect.createdRevision, effect);
+    effect.createdRevision, { adapterId: effect.adapterId, environment: effect.environment,
+      operation: effect.operation, executionAttemptId: effect.executionAttemptId,
+      idempotencyKey: effect.idempotencyKey, requestFingerprint: effect.requestFingerprint });
   return adoption.status === "FOUND" ? { kind: "ADOPTION_NEXT_PENDING", receipt: adoption.receipt } : null;
 }
 

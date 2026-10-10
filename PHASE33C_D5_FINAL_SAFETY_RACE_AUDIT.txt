@@ -1,0 +1,98 @@
+PHASE33C D5 final safety race audit
+
+Baseline: main and origin/main were a497a69220373f2d205a75762394e32955862c60;
+worktree clean. D4 boot is historical snapshot classification only and grants no
+runtime execution permission. READY_ALLOWED remains NO.
+
+Existing race coverage map (deterministic real PostgreSQL unless marked unit):
+- Pending-intent commit: COVERED, B1F P1-P4 (duplicate, lost COMMIT, stale
+  fence, final lease expiry) and X2-X3 (rollback and unique receipts).
+- Outcome adoption: COVERED, B1F A1-A5 (duplicate/conflict, lost COMMIT,
+  nested pending, final lease expiry).
+- Adoption versus pending commit on one legal revision: COVERED, B1F X1;
+  one lease-lock winner, loser REVISION_CONFLICT, one revision advance.
+- Lease/fence takeover: COVERED, B1F L1-L3; old-owner fresh mutations fail.
+- D3 terminal closure: COVERED, D3 concurrent duplicate/conflicting receipts,
+  expiry, lost COMMIT, and terminal versus unlinked fill adoption.
+- D3N normal closure: COVERED, D3N concurrent duplicate/conflicting receipts,
+  expiry, stale fence, fenced status rejection, and legacy broker writer lock.
+- D4 boot versus terminal commit: COVERED, D4 pinned pre-commit snapshot
+  versus fresh terminal snapshot on distinct backends.
+- Generic fenced writer: COVERED by the fenced-writer unit suite for terminal
+  state, identity, revision, fence, and final lease rollback; D3N adds a real
+  terminal broker writer race. No separate D5 writer race is justified.
+- Idempotency claim/status versus boot: PARTIALLY_COVERED before D5 (pure
+  classifier and writer guards, no coherent real boot interleaving); D5 closes it.
+- Boot versus pending commit: MISSING before D5; D5 closes it.
+- Boot versus outcome adoption: MISSING before D5; D5 closes it.
+- Same-session concurrent boots: NOT REQUIRED: read-only snapshots cannot
+  acquire, mutate, or grant executable authority.
+- Boot versus lease takeover: NOT REQUIRED as an executable-authority race:
+  boot is snapshot-only. Its classification is as-of its snapshot; fresh
+  mutation still locks and validates the current lease/fence (B1F L3 and
+  fenced-writer guards). A pre-takeover READY classification is not a permit.
+- Lease expiry during authority transition: COVERED by B1F P4/A5, D3 and
+  D3N final lease rollback, and fenced-writer final lease tests.
+
+New D5 proofs (3 real PostgreSQL tests, four writer interleavings):
+1. Legal pending commit from revision 1, writer held after receipt insert:
+   pinned boot sees revision 1/checkpoint entry-before/no pending and READY
+   as-of that committed snapshot. Fresh boot sees revision 2 plus pending,
+   checkpoint and receipt and requires INTENT_DISPOSITION_REQUIRED. Durable
+   revision/checkpoint/pending/receipt counts are 2/entry-after/1/1.
+2. Legal unlinked fill adoption with nested protection pending, writer held
+   after adoption receipt insert: pinned boot sees OUTCOME_AVAILABLE at
+   revision 1 with no pending. Fresh boot sees revision 2 and the next pending,
+   requiring INTENT_DISPOSITION_REQUIRED. Durable outcome/adoption receipt/
+   pending counts are 1/1/1, checkpoint adopt-fill-next.
+3. Legal pending entry effect, fenced claim and then fenced SUBMITTED update:
+   pinned boots observe ABSENT then CLAIMED; fresh boots require
+   INTENT_DISPOSITION_REQUIRED then RECONCILIATION_REQUIRED. Durable revision
+   stays 2, one pending remains, broker status SUBMITTED. No blind retry.
+
+Each D5 interleaving uses separate PostgreSQL backends, query-result barriers,
+bounded deadlines, a REPEATABLE READ READ ONLY pinned snapshot opened before
+the writer commits, and remaining authority reads after the writer commits.
+The writer is held after its real SQL mutation. MVCC reads intentionally do
+not block, so pg_blocking_pids is inapplicable; existing lock-contention
+proofs in B1F/D3/D3N use it. Final durable rows are asserted.
+
+Production defect found and fixed: after adoption created a next pending
+effect, boot passed the entire effect to an exact-shape pending identity
+validator and threw TypeError. Boot now passes only the six identity fields.
+The D5 adoption race reproduced the defect before the fix and passes after it.
+No schema or trading semantics changed.
+
+READY safety: fresh boots return INTENT_DISPOSITION_REQUIRED,
+OUTCOME_AVAILABLE, or RECONCILIATION_REQUIRED as their durable facts require;
+the pure classifier unit suite covers CANONICAL_OUTCOME_REQUIRED,
+RECOVERY_REJECTED, and conflicting evidence. D4 real tests cover terminal
+non-submission and rejected corrupt terminal tuples. Historical READY in the
+pre-commit pending snapshot grants no executable permission. READY_ALLOWED=NO.
+Terminal safety: D3/D3N real closure tests and the commit/fenced-writer unit
+guards reject new pending, adoption, status mutation, or revision advancement
+after terminal closure. D4 boot returns TERMINAL_NON_SUBMISSION without
+execution authority; the immutable terminal ref is retained. No D5 repeat.
+CONFIRMED_REJECTED without canonical typed rejection remains blocked;
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER=OPEN.
+
+Focused verification: D5 real PostgreSQL 3/3 PASS; D4 real PostgreSQL
+11/11 PASS (rerun because its production boot loader changed); classifier and
+receipt unit tests 39/39 PASS; commit and fenced-writer guard unit tests
+45/45 PASS; root typecheck PASS; PostgreSQL typecheck PASS; D5 typecheck PASS;
+git diff --check PASS. B1F, D3, D3N older real suites were not rerun because
+their production or helper code did not change. Temporary test DB access was
+restored byte-for-byte to its original hash; no access rule was retained.
+
+Criteria: D5_COVERAGE_MAP=PASS; NO_REDUNDANT_RACES=PASS;
+BOOT_ADOPTION_RACE=PASS; BOOT_PENDING_COMMIT_RACE=PASS;
+BOOT_LEASE_TAKEOVER_RACE=NOT_REQUIRED; BOOT_IDEMPOTENCY_RACE=PASS;
+ADOPTION_PENDING_RACE=ALREADY_COVERED; TERMINAL_WRITER_GUARDS=PASS;
+FALSE_READY_RACE=PASS; STALE_OWNER_MUTATION=BLOCKED.
+No D5 concurrency blocker remains for C2B3 design work. C2B3_CAN_START=YES;
+READY_ALLOWED=NO; RECONCILIATION_CANONICAL_REJECTION_BLOCKER=OPEN.
+
+Files changed: packages/orchestration-state-store-postgres/src/recovery-boot-loader.ts;
+tests/integration/d5-postgres.test.ts; vitest.d5-postgres.config.ts;
+tsconfig.d5-postgres.json; vitest.config.ts;
+PHASE33C_D5_FINAL_SAFETY_RACE_AUDIT.txt.
