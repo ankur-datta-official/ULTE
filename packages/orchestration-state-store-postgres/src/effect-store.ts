@@ -25,6 +25,10 @@ const PENDING_LOCK = `${PENDING_LOAD} FOR UPDATE`;
 const PENDING_LIST = `/* effect:pending-list */ SELECT ${PENDING_COLUMNS} FROM orchestration_pending_effect
  WHERE session_id = $1 AND state = 'PENDING'
  ORDER BY created_revision ASC, adapter_id ASC, idempotency_key ASC`;
+const TERMINAL_PENDING_LIST = `/* effect:terminal-pending-list */ SELECT ${PENDING_COLUMNS}
+ FROM orchestration_pending_effect
+ WHERE session_id = $1 AND state = 'RESOLVED' AND resolution_kind = 'TERMINAL_NON_SUBMISSION'
+ ORDER BY created_revision ASC, adapter_id ASC, idempotency_key ASC`;
 const PENDING_INSERT = `/* effect:pending-insert */ INSERT INTO orchestration_pending_effect (${PENDING_COLUMNS})
  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
  ON CONFLICT (adapter_id, idempotency_key) DO NOTHING RETURNING ${PENDING_COLUMNS}`;
@@ -122,6 +126,12 @@ export function loadPendingEffectForUpdateInTransaction(transaction: PostgresTra
   const identity = createOrchestrationPendingEffectIdentity(input);
   return infrastructure(() => readPending(transaction, identity, true, false));
 }
+/** Non-locking keyed read, including RESOLVED rows, for a coherent boot snapshot. */
+export function loadPendingEffectInTransaction(transaction: PostgresTransaction,
+  input: OrchestrationPendingEffectIdentity): Promise<OrchestrationPendingEffect | null> {
+  const identity = createOrchestrationPendingEffectIdentity(input);
+  return infrastructure(() => readPending(transaction, identity, false));
+}
 async function readOutcome(db: PostgresTransaction, key: OrchestrationOutcomeKey): Promise<OrchestrationExternalOutcome | null> {
   const row = atMostOne(await db.query<OutcomeRow>(OUTCOME_LOAD, [key]), "Outcome lookup");
   if (row === null) return null;
@@ -145,6 +155,23 @@ export function listUnresolvedEffectsInTransaction(transaction: PostgresTransact
   input: OrchestrationSessionId): Promise<readonly OrchestrationPendingEffect[]> {
   const sessionId = orchestrationSessionId(input);
   return infrastructure(() => readUnresolved(transaction, sessionId));
+}
+
+/** Enumerates terminal resolution evidence that the unresolved list deliberately omits. */
+export function listTerminalResolvedEffectsInTransaction(transaction: PostgresTransaction,
+  input: OrchestrationSessionId): Promise<readonly OrchestrationPendingEffect[]> {
+  const sessionId = orchestrationSessionId(input);
+  return infrastructure(async () => {
+    const rows = all(await transaction.query<PendingRow>(TERMINAL_PENDING_LIST, [sessionId]),
+      "Terminal resolved pending list");
+    return Object.freeze(rows.map((row) => {
+      const effect = mapPendingRow(row);
+      if (effect.sessionId !== sessionId || effect.state !== "RESOLVED"
+          || effect.resolutionKind !== "TERMINAL_NON_SUBMISSION")
+        throw new PersistenceCorruptionError("Terminal resolved list returned contradictory row");
+      return effect;
+    }));
+  });
 }
 
 async function readExecutionOutcomes(db: PostgresTransaction, sessionId: OrchestrationSessionId,

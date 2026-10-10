@@ -11,6 +11,7 @@
     { "path": "../../tools/migration-coordinator" },
     { "path": "../execution-store-postgres" },
     { "path": "../instrument-model" },
-    { "path": "../orchestration-state-store" }
+    { "path": "../orchestration-state-store" },
+    { "path": "../sandbox-orchestration-recovery" }
   ]
 }

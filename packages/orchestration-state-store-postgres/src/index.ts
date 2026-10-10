@@ -1,5 +1,5 @@
 export { PostgresOrchestrationRecoveryStore, saveRecoveryStateInTransaction,
-  loadRecoveryStateForUpdateInTransaction } from "./recovery-store.js";
+  loadRecoveryStateForUpdateInTransaction, loadRecoveryStateInTransaction } from "./recovery-store.js";
 export { PostgresOrchestrationCommitService } from "./commit-service.js";
 export { PostgresTerminalNonSubmissionCommitService, TerminalCommitError } from "./terminal-commit-service.js";
 export type { CommitTerminalNonSubmissionDispositionRequest, TerminalCommitResult,
@@ -8,13 +8,14 @@ export { PostgresOrchestrationFencedWriterService } from "./fenced-writer-servic
 export type { PendingWriterAuthority, PendingWriterFailure, PendingWriterResult,
   PendingClaimRequest, PendingStatusRequest, PendingOutcomeRequest,
   PendingTerminalRequest, PendingReconciliationRequest } from "./fenced-writer-service.js";
-export { PostgresOrchestrationRecoveryLeaseStore, assertActiveRecoveryLeaseInTransaction } from "./lease-store.js";
+export { PostgresOrchestrationRecoveryLeaseStore, assertActiveRecoveryLeaseInTransaction,
+  loadRecoveryLeaseInTransaction } from "./lease-store.js";
 export { PostgresExecutionAuthorityCheckpointStore, appendExecutionAuthorityCheckpointInTransaction,
   loadExecutionAuthorityCheckpointInTransaction } from "./checkpoint-store.js";
 export { PostgresOrchestrationEffectStore, createPendingEffectInTransaction,
   resolvePendingEffectInTransaction, loadOutcomeInTransaction, appendOutcomeInTransaction,
-  loadPendingEffectForUpdateInTransaction, listUnresolvedEffectsInTransaction,
-  listExecutionOutcomesInTransaction } from "./effect-store.js";
+  loadPendingEffectForUpdateInTransaction, loadPendingEffectInTransaction, listUnresolvedEffectsInTransaction,
+  listExecutionOutcomesInTransaction, listTerminalResolvedEffectsInTransaction } from "./effect-store.js";
 export { PostgresOrchestrationReceiptStore, loadPendingIntentCommitReceiptInTransaction,
   loadExternalOutcomeAdoptionReceiptInTransaction, appendPendingIntentCommitReceiptInTransaction,
   appendExternalOutcomeAdoptionReceiptInTransaction,
@@ -26,3 +27,5 @@ export type { AdoptionCreationProofLookupResult, ReceiptAppendResult } from "./r
 export { PersistenceConflictError, PersistenceCorruptionError, PersistenceInfrastructureError } from "./errors.js";
 export type { PostgresExecutor, PostgresQueryResult, PostgresSnapshotExecutor,
   PostgresTransaction } from "./postgres.js";
+export { PostgresRecoveryBootLoader } from "./recovery-boot-loader.js";
+export type { PostgresRecoveryBootResult } from "./recovery-boot-loader.js";

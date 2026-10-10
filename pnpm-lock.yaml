@@ -225,6 +225,9 @@ importers:
       '@ulte/orchestration-state-store':
         specifier: workspace:*
         version: link:../orchestration-state-store
+      '@ulte/sandbox-orchestration-recovery':
+        specifier: workspace:*
+        version: link:../sandbox-orchestration-recovery
     devDependencies:
       '@ulte/broker-adapters':
         specifier: workspace:*

@@ -1,0 +1,92 @@
+Task047 / Phase33C D4 terminal boot activation final audit
+
+VERDICT = FINAL PASS
+REAL_POSTGRES_VERIFIED_FOR_D4 = YES
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+
+Baseline: HEAD and origin/main were dff4df1eb4a40cdce678ab3c13d2b3cec80c14c0;
+the worktree was clean. PROJECT_SPEC.md, the revised D4 audit, D4S design and
+implementation audits, and relevant D3/D3N/classifier contracts were read.
+
+Files changed by this task:
+PHASE33C_D4_TERMINAL_BOOT_ACTIVATION_FINAL_AUDIT.txt (new)
+packages/orchestration-state-store-postgres/package.json
+packages/orchestration-state-store-postgres/src/effect-store.ts
+packages/orchestration-state-store-postgres/src/index.ts
+packages/orchestration-state-store-postgres/src/lease-store.ts
+packages/orchestration-state-store-postgres/src/recovery-boot-loader.ts (new)
+packages/orchestration-state-store-postgres/src/recovery-store.ts
+packages/orchestration-state-store-postgres/tsconfig.json
+packages/sandbox-orchestration-recovery/src/classify.test.ts
+packages/sandbox-orchestration-recovery/src/classify.ts
+packages/sandbox-orchestration-recovery/src/types.ts
+pnpm-lock.yaml
+tests/integration/d4-postgres.test.ts (new)
+tsconfig.d4-postgres.json (new)
+vitest.config.ts
+vitest.d4-postgres.config.ts (new)
+
+Snapshot loader strategy: PostgresRecoveryBootLoader requires the committed
+PostgresSnapshotExecutor. Each boot calls snapshot() exactly once. All D2C
+capability/catalog checks and recovery, lease, checkpoint, pending, broker,
+outcome, creation/adoption, and terminal receipt reads use its one transaction.
+The new recovery, keyed pending (including RESOLVED), terminal-resolved pending
+enumeration, and lease loaders are transaction-bound SELECTs without row locks.
+Existing mappers and receipt loaders are reused. No nested transaction,
+executor.query(), broker/provider call, or write occurs in boot.
+
+Classifier: terminal evidence is evaluated before lease and READY precedence.
+A V2 recovery row yields TERMINAL_NON_SUBMISSION only for the complete exact
+receipt, broker, resolved pending, creation proof, checkpoint ancestry, frozen
+identity/mode/instrument/risk/latest-R, revision/fence, and noncontradictory
+outcome tuple. Later lease-fence advancement is allowed while the historical
+terminal commit fence remains tied to the receipt and pending resolution.
+The result is stopped terminal authority with no executable runner state.
+
+Bare historical FAILED_NOT_SUBMITTED plus PENDING and no closure is rejected
+with TERMINAL_NON_SUBMISSION_PROOF_UNAVAILABLE. No proof or reviewed legacy
+attestation is invented. Database boot never emits
+TERMINAL_NON_SUBMISSION_REQUIRED. Orphan terminal-resolved pending evidence,
+partial/missing/mismatched receipt, wrong broker facts, malformed V2 recovery,
+invalid proof or ancestry, wrong resolution/ref/revision/fence, and linked
+contradictory outcomes fail closed. Terminal and partial terminal states do not
+fall through to READY. The original nonterminal C1 classification remains.
+There is no production RecoveryBootResult dispatcher to modify; no dispatcher
+or C2B3 cutover was created.
+
+Focused verification:
+- sandbox-orchestration-recovery classifier plus directly affected recovery,
+  lease, and effect store unit tests: 87/87 PASS (four files).
+- D4 real PostgreSQL: 11/11 PASS. D3N and historical D3 closed tuples boot
+  terminal; proof-missing and corrupt tuples reject; fresh snapshots remain
+  terminal; no outside executor query or writer transaction is used.
+- Full D3N/D4 race: A paused after terminal writes and before COMMIT; B on a
+  distinct backend established a snapshot from the pre-commit recovery row;
+  A committed; B read pre-commit recovery revision 2, pending PENDING, broker
+  SUBMITTED, no terminal receipt/resolution/outcome, and the checkpoint. A
+  fresh C snapshot read recovery revision 3, resolved terminal pending,
+  FAILED_NOT_SUBMITTED broker, immutable receipt, and the checkpoint, then
+  classified TERMINAL_NON_SUBMISSION. Deterministic barriers and query hooks
+  were used; no sleep-only assertion.
+- Root typecheck PASS; existing PostgreSQL typecheck PASS; separate D4
+  PostgreSQL typecheck PASS; git diff --check PASS.
+
+B1F, D3, D3N, and D2C suites were not rerun: snapshot executor, B1F helper,
+terminal commit service, migration/capability code, and their PostgreSQL test
+config were unchanged. D4 has separate PostgreSQL test and typecheck configs.
+The root Vitest config only excludes the new real PostgreSQL suite from normal
+unit runs. No migration 0007 or runtime trading cutover was added.
+
+Security cleanup: A temporary PostgreSQL HBA rule was limited to the
+disposable ulte_b1f_test database, ulte_test role, and dynamically discovered
+Windows-host /32. It was removed after each real run. The original HBA bytes
+were restored, reloaded, and verified by SHA-256
+dd4247892b7a3843814dc485cb55df577103fa4ecf97a9c81f9d2c79ea989e67;
+the temporary backup was removed. No credential, IP, trust rule, or helper
+script was committed. An initial connection attempt failed when WSL idled;
+the passing run held WSL active. No failure was counted as a pass.
+
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+D5 and C2B3 remain out of scope.

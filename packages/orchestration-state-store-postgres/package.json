@@ -17,7 +17,8 @@
     "@ulte/migration-coordinator": "workspace:*",
     "@ulte/execution-store-postgres": "workspace:*",
     "@ulte/instrument-model": "workspace:*",
-    "@ulte/orchestration-state-store": "workspace:*"
+    "@ulte/orchestration-state-store": "workspace:*",
+    "@ulte/sandbox-orchestration-recovery": "workspace:*"
   },
   "devDependencies": {
     "@ulte/broker-adapters": "workspace:*",

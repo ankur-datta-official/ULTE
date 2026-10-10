@@ -136,7 +136,7 @@ describe("recovery boot classification", () => {
   it("R7 rejects terminal FAILED_NOT_SUBMITTED", () => {
     const result = classify({ pendingEffects: [pending("FAILED_NOT_SUBMITTED")] });
     expect(result).toMatchObject({
-      status: "RECOVERY_REJECTED", reason: "UNSUPPORTED_TERMINAL_NON_SUBMISSION" });
+      status: "RECOVERY_REJECTED", reason: "TERMINAL_NON_SUBMISSION_PROOF_UNAVAILABLE" });
     expect(result.status).not.toBe("TERMINAL_NON_SUBMISSION_REQUIRED");
     expect(result.status).not.toBe("TERMINAL_NON_SUBMISSION");
     expect(result.status).not.toBe("READY");

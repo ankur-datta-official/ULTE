@@ -3,6 +3,7 @@ import type {
   OrchestrationPendingEffect,
   OrchestrationPendingEffectIdentity,
 } from "@ulte/orchestration-state-store";
+import { createTerminalNonSubmissionDispositionReceiptV1, equalCanonicalJson } from "@ulte/orchestration-state-store";
 import type {
   LoadedExternalOutcome,
   LoadedPendingEffect,
@@ -80,9 +81,92 @@ function candidatePriority(result: Candidate): number {
   }
 }
 
+function terminalResult(input: RecoveryBootClassifierInput, ref: RecoveryBootAuthorityRef):
+  RecoveryBootResult | null {
+  const terminal = input.terminal;
+  const recovery = input.recovery;
+  if (recovery.schemaVersion !== "ORCHESTRATION_RECOVERY_RECORD_V2") {
+    return terminal === undefined || terminal.receipt === null && terminal.resolvedEffects.length === 0
+      ? null : reject(ref, "PERSISTENCE_CORRUPTION");
+  }
+  if (terminal === undefined || terminal.receipt === null || terminal.pending === null
+      || terminal.creationProof === null || terminal.creationCheckpoint === null
+      || terminal.idempotency.status !== "PRESENT" || terminal.leaseFence !== ref.fenceToken
+      || input.evidence !== "COMPLETE" || input.checkpoint.status !== "VALID")
+    return reject(ref, "PERSISTENCE_CORRUPTION");
+  try {
+    const receipt = createTerminalNonSubmissionDispositionReceiptV1(terminal.receipt);
+    const d = receipt.disposition;
+    const p = terminal.pending;
+    const broker = terminal.idempotency.record;
+    const checkpoint = input.checkpoint.checkpoint;
+    const creation = terminal.creationProof;
+    const created = terminal.creationCheckpoint.evidence;
+    const current = checkpoint.evidence;
+    if (d.dispositionRef !== recovery.terminalNonSubmissionDispositionRef
+        || d.sessionId !== ref.sessionId || d.executionAttemptId !== d.pendingEffectIdentity.executionAttemptId
+        || d.committedRevision !== ref.recoveryRevision || d.committedFence > ref.fenceToken
+        || d.executionAuthorityCheckpointRefAfter !== ref.checkpointRef
+        || d.expectedRecoveryRevision + 1 !== ref.recoveryRevision
+        || !equalCanonicalJson(d.executionAuthorityIdentity, recovery.executionAuthorityIdentity)
+        || d.mode !== recovery.mode || d.instrumentId !== recovery.instrumentId
+        || d.riskBasisCheckpointRef !== recovery.riskBasisCheckpointRef
+        || d.latestROutcomeRef !== recovery.latestROutcomeRef
+        || checkpoint.checkpointRef !== ref.checkpointRef
+        || !equalCanonicalJson(current.identity, recovery.executionAuthorityIdentity)
+        || p.sessionId !== ref.sessionId || !sameIdentity(p, d.pendingEffectIdentity)
+        || p.state !== "RESOLVED" || p.schemaVersion !== "ORCHESTRATION_PENDING_EFFECT_V2"
+        || p.resolutionKind !== "TERMINAL_NON_SUBMISSION"
+        || p.resolvedAuthorityRef !== d.dispositionRef || p.resolvedOutcomeKey !== null
+        || p.resolvedRevision !== d.committedRevision || p.resolvedFence !== d.committedFence
+        || p.createdRevision !== d.pendingCreatedRevision || p.createdFence !== d.pendingCreatedFence
+        || broker.adapterId !== p.adapterId || broker.environment !== p.environment
+        || broker.operation !== p.operation || broker.executionAttemptId !== p.executionAttemptId
+        || broker.idempotencyKey !== p.idempotencyKey || broker.requestFingerprint !== p.requestFingerprint
+        || broker.status !== "FAILED_NOT_SUBMITTED" || broker.adapterOrderId !== undefined
+        || creation.kind !== d.pendingCreationRef.kind
+        || creation.receipt.sessionId !== ref.sessionId
+        || creation.receipt.committedCheckpointRef !== d.pendingCreationRef.committedCheckpointRef
+        || terminal.creationCheckpoint.checkpointRef !== d.pendingCreationRef.committedCheckpointRef
+        || created.schemaVersion !== current.schemaVersion
+        || !equalCanonicalJson(created.identity, current.identity)
+        || !equalCanonicalJson(created.initialization, current.initialization)
+        || created.transitions.length > current.transitions.length
+        || !created.transitions.every((transition, i) => equalCanonicalJson(transition, current.transitions[i])))
+      return reject(ref, "PERSISTENCE_CORRUPTION");
+    const origin = creation.kind === "PENDING_INTENT_COMMIT"
+      ? creation.receipt.pendingEffect : creation.receipt.nextPendingEffect;
+    if (origin === null || !sameIdentity(origin, p) || origin.state !== "PENDING"
+        || origin.createdRevision !== p.createdRevision || origin.createdFence !== p.createdFence
+        || creation.kind === "PENDING_INTENT_COMMIT"
+          && (creation.receipt.committedRevision !== p.createdRevision
+            || creation.receipt.committedFence !== p.createdFence)
+        || creation.kind === "ADOPTION_NEXT_PENDING"
+          && (creation.receipt.adoptedRevision !== p.createdRevision
+            || creation.receipt.adoptedFence !== p.createdFence)
+        || input.pendingEffects.length !== 0
+        || terminal.resolvedEffects.length !== 1
+        || !sameIdentity(terminal.resolvedEffects[0]!, p)
+        || input.outcomes.some((item) => item.outcome.pendingEffectIdentity !== null
+          && sameIdentity(item.outcome.pendingEffectIdentity, p)
+          && (item.outcome.observation.kind === "CANONICAL_EXECUTION_TRANSITION"
+            || item.outcome.observation.disposition.status !== "CONFIRMED_NOT_SUBMITTED")))
+      return reject(ref, "PERSISTENCE_CORRUPTION");
+    return Object.freeze({ ...ref, status: "TERMINAL_NON_SUBMISSION",
+      checkpointRef: d.executionAuthorityCheckpointRefAfter,
+      dispositionRef: d.dispositionRef, dispositionReceipt: receipt,
+      resolvedPendingEffectIdentity: d.pendingEffectIdentity,
+      sessionDisposition: "TERMINAL_NON_SUBMISSION" });
+  } catch {
+    return reject(ref, "PERSISTENCE_CORRUPTION");
+  }
+}
+
 /** Classifies a complete, already-loaded durable snapshot. Returned references grant no execution authority. */
 export function classifyRecoveryBoot(input: RecoveryBootClassifierInput): RecoveryBootResult {
   const ref = authority(input);
+  const terminal = terminalResult(input, ref);
+  if (terminal !== null) return terminal;
   if (input.lease !== "VALID") return reject(ref, "LEASE_OR_FENCE_INVALID");
   if (input.evidence === "CORRUPT") return reject(ref, "PERSISTENCE_CORRUPTION");
   if (input.evidence !== "COMPLETE") return reject(ref, "REQUIRED_EVIDENCE_UNAVAILABLE");
@@ -133,7 +217,8 @@ export function classifyRecoveryBoot(input: RecoveryBootClassifierInput): Recove
       }
       if (id.environment !== effect.environment) return reject(ref, "IDEMPOTENCY_ENVIRONMENT_CONFLICT", effect);
       if (id.requestFingerprint !== effect.requestFingerprint) return reject(ref, "FINGERPRINT_CONFLICT", effect);
-      if (id.status === "FAILED_NOT_SUBMITTED") return reject(ref, "UNSUPPORTED_TERMINAL_NON_SUBMISSION", effect);
+      if (id.status === "FAILED_NOT_SUBMITTED") return reject(ref,
+        "TERMINAL_NON_SUBMISSION_PROOF_UNAVAILABLE", effect);
     }
   }
 

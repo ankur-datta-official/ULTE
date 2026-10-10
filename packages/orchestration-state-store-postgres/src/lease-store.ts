@@ -27,6 +27,8 @@ INSERT INTO orchestration_recovery_lease (${COLUMNS}) VALUES ($1, $2, 1, 0)
 ON CONFLICT (session_id) DO NOTHING RETURNING ${COLUMNS}`;
 const LOCK_SQL = `/* orchestration-state-store-postgres:lease-lock */
 SELECT ${COLUMNS} FROM orchestration_recovery_lease WHERE session_id = $1 FOR UPDATE`;
+const LOAD_SQL = `/* orchestration-state-store-postgres:lease-load */
+SELECT ${COLUMNS} FROM orchestration_recovery_lease WHERE session_id = $1`;
 const STATE_LOCK_SQL = `/* orchestration-state-store-postgres:lease-state-lock */
 SELECT session_id, fence_token FROM orchestration_recovery_state WHERE session_id = $1 FOR UPDATE`;
 const ACQUIRE_UPDATE_SQL = `/* orchestration-state-store-postgres:lease-acquire-update */
@@ -110,6 +112,16 @@ async function dbNow(transaction: PostgresTransaction): Promise<UnixMs> {
 async function lockedLease(transaction: PostgresTransaction, sessionId: OrchestrationSessionId): Promise<MappedLeaseRow | null> {
   const row = atMostOne(await transaction.query<LeaseRow>(LOCK_SQL, [sessionId]), "Lease lock");
   return row === null ? null : matchingLease(row, sessionId);
+}
+
+/** Historical lease/fence facts only; this grants no fresh writer authority. */
+export async function loadRecoveryLeaseInTransaction(transaction: PostgresTransaction,
+  input: OrchestrationSessionId): Promise<MappedLeaseRow | null> {
+  const sessionId = orchestrationSessionId(input);
+  return infrastructure(async () => {
+    const row = atMostOne(await transaction.query<LeaseRow>(LOAD_SQL, [sessionId]), "Lease load");
+    return row === null ? null : matchingLease(row, sessionId);
+  });
 }
 
 export type ActiveRecoveryLeaseResult =

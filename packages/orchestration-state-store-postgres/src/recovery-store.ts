@@ -90,6 +90,19 @@ async function lockedRecord(transaction: PostgresTransaction, sessionId: Orchest
   return record;
 }
 
+/** Non-locking authority read for a caller-owned coherent snapshot. */
+export async function loadRecoveryStateInTransaction(transaction: PostgresTransaction,
+  input: OrchestrationSessionId): Promise<OrchestrationRecoveryRecord | null> {
+  const sessionId = orchestrationSessionId(input);
+  const result = await transaction.query<RecoveryRow>(LOAD_SQL, [sessionId]);
+  if (result.rowCount !== result.rows.length || result.rows.length > 1 || result.rowCount < 0)
+    throw new PersistenceCorruptionError("Recovery load returned an impossible row count");
+  if (result.rows.length === 0) return null;
+  const record = singleRow(result.rows, "Recovery load");
+  if (record.sessionId !== sessionId) throw new PersistenceCorruptionError("Recovery load session mismatch");
+  return record;
+}
+
 /** Caller holds the lease row first when composing a fenced workflow. */
 export function loadRecoveryStateForUpdateInTransaction(transaction: PostgresTransaction,
   sessionId: OrchestrationSessionId): Promise<OrchestrationRecoveryRecord | null> {
@@ -108,12 +121,7 @@ export class PostgresOrchestrationRecoveryStore implements OrchestrationRecovery
   public constructor(private readonly executor: PostgresExecutor) {}
 
   public async loadRecoveryState(sessionId: OrchestrationSessionId): Promise<OrchestrationRecoveryRecord | null> {
-    const validId = orchestrationSessionId(sessionId);
-    const result = await this.executor.query<RecoveryRow>(LOAD_SQL, [validId]);
-    if (result.rows.length === 0) return null;
-    const record = singleRow(result.rows, "Recovery load");
-    if (record.sessionId !== validId) throw new PersistenceCorruptionError("Recovery load session mismatch");
-    return record;
+    return loadRecoveryStateInTransaction(this.executor, sessionId);
   }
 
   public initializeRecoveryState(write: OrchestrationRecoveryWrite): Promise<OrchestrationRecoverySaveResult> {

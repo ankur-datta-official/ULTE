@@ -56,6 +56,16 @@ export interface RecoveryBootClassifierInput {
   readonly evidence: "COMPLETE" | "UNAVAILABLE" | "CORRUPT";
   readonly pendingEffects: readonly LoadedPendingEffect[];
   readonly outcomes: readonly LoadedExternalOutcome[];
+  /** Loaded on the same database snapshot; absent for the original C1 classifier callers. */
+  readonly terminal?: Readonly<{
+    readonly receipt: TerminalNonSubmissionDispositionReceiptV1 | null;
+    readonly pending: OrchestrationPendingEffect | null;
+    readonly resolvedEffects: readonly OrchestrationPendingEffect[];
+    readonly creationProof: PendingCreationProof | null;
+    readonly creationCheckpoint: ExecutionAuthorityCheckpoint | null;
+    readonly idempotency: LoadedIdempotency;
+    readonly leaseFence: OrchestrationFenceToken | null;
+  }>;
 }
 
 export interface RecoveryBootAuthorityRef {
@@ -88,12 +98,13 @@ export type RecoveryBootRejectionReason =
   | "CONFLICTING_CANONICAL_OUTCOMES"
   | "REQUIRED_EVIDENCE_UNAVAILABLE"
   | "UNSUPPORTED_TERMINAL_NON_SUBMISSION"
+  | "TERMINAL_NON_SUBMISSION_PROOF_UNAVAILABLE"
   | "PERSISTENCE_CORRUPTION";
 
 export type RecoveryBootResult =
   | Readonly<RecoveryBootAuthorityRef & { readonly status: "READY" }>
-  /** Future result only. The current classifier still rejects FAILED_NOT_SUBMITTED.
-   * Neither this variant nor the terminal variant participates in current precedence; D4 owns it.
+  /** Public proof-backed handoff for a future non-database authority source.
+   * The database-only D4 boot path never constructs this variant.
    */
   | Readonly<RecoveryBootAuthorityRef & {
       readonly status: "TERMINAL_NON_SUBMISSION_REQUIRED";
@@ -110,7 +121,7 @@ export type RecoveryBootResult =
       };
       readonly proof: TerminalNonSubmissionProofV1;
     }>
-  /** Future durable terminal result; the session cannot hydrate or resume execution. */
+  /** Validated durable terminal result; the session cannot hydrate or resume execution. */
   | Readonly<RecoveryBootAuthorityRef & {
       readonly status: "TERMINAL_NON_SUBMISSION";
       readonly checkpointRef: ExecutionAuthorityCheckpointId;
