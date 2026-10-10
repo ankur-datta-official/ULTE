@@ -1,0 +1,179 @@
+Task044A / Phase33C D3N PRE0 normal-flow terminal closure design audit
+
+VERDICT = DESIGN PASS (source-only feasibility/design; no implementation or runtime verification)
+HEAD = 53f6fbe25a7072f3514b9ae828f0b7390edb984f
+origin/main = 53f6fbe25a7072f3514b9ae828f0b7390edb984f
+Initial git status = only ?? PHASE33C_D4_TERMINAL_BOOT_ACTIVATION_AUDIT.txt
+
+Proof gap and D1 decision
+BOOT_MUST_NOT_FABRICATE_PROOF = YES. TerminalNonSubmissionProofV1 requires a
+source kind/ref, observedAt, failure category, definite-failure certainty,
+NOT_SUBMITTED exposure, DO_NOT_RETRY disposition, and exact pending identity.
+RecoveryBootResult.TERMINAL_NON_SUBMISSION_REQUIRED requires that proof. A bare
+broker IdempotencyRecord/row contains identity, status, timestamps, and optional
+adapterOrderId, not the proof. The broker audit table has no mandatory link to
+that row and lacks the complete proof. The D3 integration fixture inserts only
+the FAILED_NOT_SUBMITTED row and supplies its proof separately to D3. Keep the
+D1 proof mandatory; making it optional would turn an unreviewed status into
+actionable closure authority. The structural D1 constructor validates proof
+coherence, but runtime/admin provenance must be established by the caller.
+
+Legacy boot policy
+LEGACY_PROOF_MISSING = RECOVERY_REJECTED, with a new precise reason such as
+TERMINAL_NON_SUBMISSION_PROOF_UNAVAILABLE. Such a row is never READY,
+TERMINAL_NON_SUBMISSION_REQUIRED, INTENT_DISPOSITION_REQUIRED, retry-authorized,
+or normal reconciliation authority. Do not synthesize a proof or change the
+broker status. Only exact independently trusted proof may permit a future
+explicit historical D3 call.
+
+Reviewed attestation boundary
+CURRENT_ADMIN_ATTESTATION_WORKFLOW = NONE. Repository search found the
+REVIEWED_LEGACY_ATTESTATION enum and constructor/tests, but no review/admin
+producer. A future workflow would need explicit reviewer authority, a stable
+reviewable sourceEventRef, independently reviewable definite non-submission
+evidence, all D1 fields, and an exact pending identity. Boot cannot act as that
+workflow. Proof-missing legacy rows remain rejected until one exists.
+
+Normal-flow crash window
+SPLIT_NORMAL_FLOW = UNSAFE. The current D3 service only closes an already
+FAILED_NOT_SUBMITTED row; a separate fenced status writer can commit that
+status without the terminal receipt, pending resolution, or recovery ref. A
+crash after that status commit and before D3 leaves durable
+FAILED_NOT_SUBMITTED + PENDING with no persisted proof. On reboot the D1
+required-action result cannot truthfully be constructed. This is a blocked
+legacy-style state, not a reason to relax the proof contract.
+
+Option comparison
+Option A: Add a normal branch to the D3 terminal commit service. After broker
+activity finishes, accept a trusted typed adapter failure and make the exact
+SUBMITTED -> FAILED_NOT_SUBMITTED broker transition and terminal closure in
+one physical PostgreSQL transaction. Atomic rollback prevents the split state;
+the immutable receipt stores the proof for replay/boot. It uses existing
+schema, FK, and capability checks. Future C2B3 composition invokes this one
+operation rather than the generic status writer plus historical D3.
+Option B: Store a pre-closure proof in a new table. This can let boot recover
+a split flow, but creates a second proof lifecycle, extra cross-package
+authority and boot reads, and likely another migration. It still needs strict
+atomic linking to the status transition or a new split window remains. Option
+A is feasible, so B is unnecessary.
+SELECTED_ARCHITECTURE = D3_ATOMIC_NORMAL_BRANCH
+NEW_MIGRATION_REQUIRED = NO
+
+Transaction feasibility and exact boundary
+The execution and orchestration PostgreSQL transaction interfaces both expose
+the same caller-owned transaction/query shape. The execution store exports
+recordIdempotencyOutcomeInTransaction, already consumed inside the fenced
+orchestration writer on the same transaction. D2C integrates broker and
+orchestration tables in one checked database/schema and verifies the terminal
+FK. The D3 service already pins its capability check and all writes to one
+executor.transaction callback. Therefore it can call the existing narrow
+status helper on that transaction; no generic SQL backdoor or new helper is
+needed. Its helper's conditional update and the database trigger both permit
+SUBMITTED -> FAILED_NOT_SUBMITTED. The helper must not be called via the
+repository method, which opens its own transaction.
+
+Recommended public API: preserve the existing
+commitTerminalNonSubmissionDisposition(request) as the historical-only method.
+Add commitNormalTerminalNonSubmissionDisposition(request) with a distinct
+NormalTerminalNonSubmissionRequest type. Its disposition must include a
+mandatory TerminalNonSubmissionProofV1 narrowed to
+sourceKind=TRUSTED_ADAPTER_FAILURE, and it must include an explicit UTC
+brokerStatusUpdatedAt. The caller constructs the proof from the typed adapter
+failure after provider activity has ended; TypeScript shape alone does not
+establish source trust. Validate brokerStatusUpdatedAt against the locked row's
+updatedAt and proof.observedAt; fail closed on invalid chronology. Both public
+methods share a private transaction implementation with an explicit internal
+mode. Historical calls retain the existing mandatory proof and require an
+already durable FAILED_NOT_SUBMITTED row. Do not expose a public generic mode
+flag that can accidentally send normal failures through the historical path.
+
+Exact normal transaction (single pinned connection, no provider I/O)
+1. Validate D1 disposition/proof and normal source kind; begin transaction and
+   verify complete D2C capability, database/schema/search_path.
+2. Read receipt by disposition ref, session, and exact broker triple. If an
+   equivalent immutable receipt exists, return ALREADY_COMMITTED; conflict
+   otherwise. This check precedes the expected SUBMITTED status gate.
+3. Lock/check lease and fence; recheck receipt after lease serialization.
+4. Lock recovery V1; check revision, fence, session, execution identity,
+   unchanged checkpoint, mode, instrument, risk and R refs.
+5. Lock exact pending PENDING row; check identity, null resolution fields,
+   creation receipt and checkpoint ancestry.
+6. Lock the exact broker row by adapter_id, environment, idempotency_key;
+   require same operation, attempt and fingerprint, status SUBMITTED, and no
+   adapterOrderId. Reject OUTCOME_UNKNOWN, RETRY_AUTHORIZED, CONFIRMED,
+   REJECTED, prior FAILED_NOT_SUBMITTED, and any ambiguous/contradictory state.
+7. Check linked outcomes; reject canonical acceptance/rejection or any other
+   outcome that contradicts definite non-submission. Validate the exact proof
+   identity, DEFINITE_FAILURE, NOT_SUBMITTED, DO_NOT_RETRY and event chronology.
+8. Call recordIdempotencyOutcomeInTransaction(tx, ...) with the full broker
+   identity assertions, status FAILED_NOT_SUBMITTED, and explicit updatedAt.
+   Require APPLIED_TRANSITION and verify returned exact status/identity and
+   absent adapterOrderId. STATUS_CONFLICT or a duplicate without a receipt is
+   failure, never normal success.
+9. Insert immutable terminal receipt with that exact proof; resolve pending
+   TERMINAL_NON_SUBMISSION to its disposition ref/revision/fence; CAS recovery
+   revision +1 to V2 and that ref; verify frozen authority; recheck lease;
+   commit. Any failure rolls back the broker status and all closure rows.
+
+The lock order is lease, recovery, pending, broker, receipt write, matching
+existing fenced writers and D3. Receipt pre-reads do not acquire writer locks.
+No transaction spans adapter/provider activity. The provider result is an
+input to persistence, not obtained by persistence.
+
+Lost response and conflicts
+An exact retry after a lost COMMIT response sees receipt first and returns
+ALREADY_COMMITTED even though broker status is now FAILED_NOT_SUBMITTED.
+Receipt comparison uses the existing full D1 logical payload, not the current
+owner/fence; a conflicting proof/ref/session/identity fails closed. Recovery
+revision advances exactly once. A no-receipt FAILED_NOT_SUBMITTED row is never
+treated as normal success; it is eligible only for the explicit historical
+method with independently trusted proof. Neither route authorizes retry.
+
+D4 consequence
+D4_CLOSED_STATE_ACTIVATION_FEASIBLE = YES. A coherent pinned boot snapshot can
+load recovery V2 terminal ref, immutable receipt by ref/session/identity,
+linked pending V2 RESOLVED with TERMINAL_NON_SUBMISSION resolution and exact
+ref/revision/fence, exact broker FAILED_NOT_SUBMITTED row without order ID,
+execution checkpoint/ancestry, lease/fence, relevant outcomes and D2C
+capability. Validate all frozen D1/D3 fields; no single signal suffices.
+An exact closed tuple yields TERMINAL_NON_SUBMISSION. A bare historical
+FAILED_NOT_SUBMITTED + PENDING without proof yields RECOVERY_REJECTED /
+TERMINAL_NON_SUBMISSION_PROOF_UNAVAILABLE. TERMINAL_NON_SUBMISSION_REQUIRED
+may appear only if boot/composition receives an exact trusted persisted or
+explicitly supplied proof; there is currently no pre-closure durable proof
+source or admin workflow, so bare rows do not emit REQUIRED. A later D4 loader
+must use one coherent PostgreSQL snapshot and fail closed on partial tuples.
+
+Rollout order and verification plan
+1. Implement D3N normal atomic method without changing historical D3 semantics.
+2. Verify real PostgreSQL commit/rollback, invalid starting states, wrong
+   identity/proof, conflicting outcomes, lost response, one revision, and
+   deterministic distinct-connection D3N/boot and writer races.
+3. Commit D3N after its own gates pass.
+4. Resume D4 with closed-state hydration, proof-missing legacy rejection,
+   coherent boot read and terminal dispatch/READY exclusion.
+5. Run D5 exhaustive race matrix, then resume C2B3 runtime cutover.
+The CONFIRMED_REJECTED canonical reconciliation issue remains separate.
+
+Source references reviewed
+- PROJECT_SPEC.md; docs/execution/broker-adapter-infrastructure-v1.md
+- packages/orchestration-state-store/src/terminal-non-submission-disposition.ts
+- packages/sandbox-orchestration-recovery/src/types.ts and classify.ts
+- packages/broker-adapters/src/idempotency.ts and audit.ts
+- packages/execution-store-postgres/src/idempotency-repository.ts and postgres.ts
+- packages/execution-store-postgres/migrations/0001_execution_store.sql and
+  0002_idempotency_state_machine.sql
+- packages/orchestration-state-store-postgres/src/terminal-commit-service.ts,
+  fenced-writer-service.ts, postgres.ts, effect-store.ts, recovery-store.ts,
+  receipt-store.ts
+- packages/orchestration-state-store-postgres/migrations/0006_terminal_non_submission_persistence.sql
+- migrations/integration/0001_terminal_non_submission_broker_idempotency_fk.sql
+- tools/migration-coordinator/src/index.ts; tests/integration/d3-postgres.test.ts
+- The PRE2 summary was supplied in the task; no PRE2 source file is present
+  in this worktree.
+
+No production source, test, migration, or prior D4 audit was changed. This is
+a design audit only; no database connection or migration was used.
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+Commit/push = none

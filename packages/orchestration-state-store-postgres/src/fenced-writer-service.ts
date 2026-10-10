@@ -46,7 +46,9 @@ export type PendingWriterFailure =
   | Readonly<{ readonly status: "REVISION_CONFLICT"; readonly currentRevision: OrchestrationRevision }>;
 export type PendingWriterResult<T> = Readonly<{ readonly status: "PERSISTED"; readonly result: T }> | PendingWriterFailure;
 export interface PendingClaimRequest extends PendingWriterAuthority { readonly claim: ClaimInput }
-export interface PendingStatusRequest extends PendingWriterAuthority { readonly update: StatusInput }
+export interface PendingStatusRequest extends PendingWriterAuthority {
+  readonly update: StatusInput & { readonly status: Exclude<StatusInput["status"], "FAILED_NOT_SUBMITTED"> };
+}
 export interface PendingOutcomeRequest extends PendingWriterAuthority { readonly outcome: OrchestrationExternalOutcome }
 export interface PendingTerminalRequest extends PendingWriterAuthority {
   readonly update: StatusInput;
@@ -301,6 +303,9 @@ export class PostgresOrchestrationFencedWriterService {
     });
   }
   public recordPendingIdempotencyOutcome(input: PendingStatusRequest): Promise<PendingWriterResult<StatusResult>> {
+    if ((input.update as StatusInput).status === "FAILED_NOT_SUBMITTED") {
+      throw new TypeError("Definite terminal non-submission requires atomic terminal closure");
+    }
     assertIdentity(input.update, input.pendingEffectIdentity);
     return this.run(input, async (tx, request) => {
       const result = await recordIdempotencyOutcomeInTransaction(tx,

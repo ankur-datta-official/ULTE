@@ -20,6 +20,8 @@ const tables = ["orchestration_recovery_state", "orchestration_recovery_lease",
   "orchestration_terminal_non_submission_disposition"] as const;
 const schemaPattern = /^b1f_[0-9a-f]{24}$/;
 const markers = ["receipt:pending-load", "receipt:adoption-load",
+  "execution-store-postgres:outcome-select", "execution-store-postgres:outcome-update",
+  "terminal:broker-lock",
   "receipt:terminal-ref-load", "receipt:terminal-insert", "effect:terminal-resolve",
   "orchestration-state-store-postgres:terminal-update",
   "orchestration-state-store-postgres:lease-lock", "orchestration-state-store-postgres:lease-clock",
@@ -60,6 +62,7 @@ export class RealPostgresExecutor implements PostgresExecutor {
   public beforeQuery: QueryHook | undefined;
   public afterQuery: QueryHook | undefined;
   public loseNextCommitResponse = false;
+  public failNextCommit = false;
   public lastTransactionPid: number | undefined;
 
   readonly #schema: string;
@@ -102,6 +105,8 @@ export class RealPostgresExecutor implements PostgresExecutor {
     let began = false;
     const loseResponse = this.loseNextCommitResponse;
     this.loseNextCommitResponse = false;
+    const failCommit = this.failNextCommit;
+    this.failNextCommit = false;
     try {
       await this.bind(client);
       await client.query("BEGIN");
@@ -118,6 +123,7 @@ export class RealPostgresExecutor implements PostgresExecutor {
         return { rows: result.rows as Row[], rowCount: result.rowCount ?? 0 };
       } };
       const result = await work(tx);
+      if (failCommit) throw new Error("Synthetic failure before PostgreSQL COMMIT");
       await client.query("COMMIT");
       committed = true;
       if (loseResponse) throw new LostCommitResponseError();

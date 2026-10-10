@@ -188,6 +188,13 @@ class Fake implements PostgresExecutor {
 function service(db: Fake) { return new PostgresOrchestrationFencedWriterService(db); }
 
 describe("fenced recoverable writer", () => {
+  it("cannot persist definite terminal non-submission without atomic closure", () => {
+    const db = new Fake();
+    expect(() => service(db).recordPendingIdempotencyOutcome({ ...authority,
+      update: { ...confirmed, status: "FAILED_NOT_SUBMITTED", adapterOrderId: undefined } as never }))
+      .toThrow("atomic terminal closure");
+    expect(db.calls).toHaveLength(0);
+  });
   it("blocks every fresh writer path for a terminal recovery before pending or idempotency I/O", async () => {
     const db = new Fake();
     db.recovery = { ...db.recovery, schema_version: "ORCHESTRATION_RECOVERY_RECORD_V2",

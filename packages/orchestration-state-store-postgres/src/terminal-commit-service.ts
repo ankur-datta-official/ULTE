@@ -1,5 +1,7 @@
 import { verifyTerminalSchemaCapabilityOnClient, type MigrationTarget,
   type PinnedMigrationClient } from "@ulte/migration-coordinator";
+import { recordIdempotencyOutcomeInTransaction } from "@ulte/execution-store-postgres";
+import { unixMs, type UnixMs } from "@ulte/instrument-model";
 import {
   createTerminalNonSubmissionDispositionReceiptV1, createTerminalNonSubmissionDispositionV1,
   equalCanonicalJson, equivalentTerminalNonSubmissionDispositionRetry,
@@ -7,6 +9,7 @@ import {
   TERMINAL_NON_SUBMISSION_DISPOSITION_V1,
   type ExecutionAuthorityCheckpoint, type OrchestrationPendingEffect,
   type TerminalNonSubmissionDispositionLogicalPayload,
+  type TerminalNonSubmissionProofV1,
   type TerminalNonSubmissionDispositionReceiptV1,
   type OrchestrationFenceToken, type OrchestrationLeaseOwnerId,
 } from "@ulte/orchestration-state-store";
@@ -38,6 +41,14 @@ export interface CommitTerminalNonSubmissionDispositionRequest {
   readonly ownerId: OrchestrationLeaseOwnerId;
   readonly expectedFence: OrchestrationFenceToken;
   readonly disposition: TerminalNonSubmissionDispositionLogicalPayload;
+}
+/** Runtime-only closure after a trusted adapter has finished its provider activity. */
+export interface NormalTerminalNonSubmissionRequest
+  extends Omit<CommitTerminalNonSubmissionDispositionRequest, "disposition"> {
+  readonly disposition: Omit<TerminalNonSubmissionDispositionLogicalPayload, "proof"> & {
+    readonly proof: TerminalNonSubmissionProofV1 & { readonly sourceKind: "TRUSTED_ADAPTER_FAILURE" };
+  };
+  readonly brokerStatusUpdatedAt: UnixMs;
 }
 export type TerminalCommitResult = Readonly<{
   readonly status: "COMMITTED" | "ALREADY_COMMITTED";
@@ -89,13 +100,21 @@ async function checkCreationProof(tx: PostgresTransaction, pending: Orchestratio
 }
 
 const BROKER_LOCK = `/* terminal:broker-lock */ SELECT adapter_id, environment, idempotency_key,
- operation, execution_attempt_id, request_fingerprint, status, adapter_order_id
+ operation, execution_attempt_id, request_fingerprint, status, adapter_order_id, updated_at_ms
  FROM broker_idempotency_records
  WHERE adapter_id = $1 AND environment = $2 AND idempotency_key = $3 FOR UPDATE`;
 interface BrokerRow {
   readonly adapter_id: unknown; readonly environment: unknown; readonly idempotency_key: unknown;
   readonly operation: unknown; readonly execution_attempt_id: unknown;
   readonly request_fingerprint: unknown; readonly status: unknown; readonly adapter_order_id: unknown;
+  readonly updated_at_ms: unknown;
+}
+
+function brokerUpdatedAt(value: unknown): UnixMs {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return unixMs(value);
+  if (typeof value === "string" && /^(0|[1-9]\d*)$/.test(value)
+      && BigInt(value) <= BigInt(Number.MAX_SAFE_INTEGER)) return unixMs(Number(value));
+  throw new PersistenceCorruptionError("Invalid broker idempotency update timestamp");
 }
 
 /** One physical PostgreSQL transaction; no provider or broker call is made. */
@@ -104,12 +123,26 @@ export class PostgresTerminalNonSubmissionCommitService {
 
   public async commitTerminalNonSubmissionDisposition(input: CommitTerminalNonSubmissionDispositionRequest):
     Promise<TerminalCommitResult> {
+    return this.commit(input, null);
+  }
+
+  public async commitNormalTerminalNonSubmissionDisposition(input: NormalTerminalNonSubmissionRequest):
+    Promise<TerminalCommitResult> {
+    return this.commit(input, unixMs(input.brokerStatusUpdatedAt));
+  }
+
+  private async commit(input: CommitTerminalNonSubmissionDispositionRequest, normalUpdatedAt: UnixMs | null):
+    Promise<TerminalCommitResult> {
     const request = input.disposition;
     const candidate = createTerminalNonSubmissionDispositionV1({ ...request,
       schemaVersion: TERMINAL_NON_SUBMISSION_DISPOSITION_V1,
       committedFence: input.expectedFence, committingOwnerId: input.ownerId,
       resolution: { ...request.resolution, resolvedFence: input.expectedFence },
     });
+    if (normalUpdatedAt !== null && (candidate.proof.sourceKind !== "TRUSTED_ADAPTER_FAILURE"
+        || normalUpdatedAt < candidate.proof.observedAt)) {
+      throw new TypeError("Normal terminal closure requires a trusted adapter proof and coherent timestamp");
+    }
     try {
       return await this.executor.transaction(async (tx) => {
         // Pin the verifier to this transaction's physical connection and search_path.
@@ -182,14 +215,38 @@ export class PostgresTerminalNonSubmissionCommitService {
             || row.idempotency_key !== p.idempotencyKey || row.operation !== p.operation
             || row.execution_attempt_id !== p.executionAttemptId
             || row.request_fingerprint !== p.requestFingerprint
-            || row.status !== "FAILED_NOT_SUBMITTED" || row.adapter_order_id !== null)
+            || row.status !== (normalUpdatedAt === null ? "FAILED_NOT_SUBMITTED" : "SUBMITTED")
+            || row.adapter_order_id !== null)
           conflict("IDEMPOTENCY_STATE_CONFLICT", "Exact broker idempotency is not definitely unsubmitted");
+        if (normalUpdatedAt !== null && candidate.proof.observedAt < brokerUpdatedAt(row.updated_at_ms)) {
+          conflict("IDEMPOTENCY_STATE_CONFLICT", "Terminal proof predates the submitted broker state");
+        }
         const outcomes = await listExecutionOutcomesInTransaction(tx, candidate.sessionId, candidate.executionAttemptId);
         if (outcomes.some((outcome) => outcome.pendingEffectIdentity !== null
             && equalCanonicalJson(outcome.pendingEffectIdentity, p)
             && (outcome.observation.kind === "CANONICAL_EXECUTION_TRANSITION"
               || outcome.observation.disposition.status !== "CONFIRMED_NOT_SUBMITTED")))
           conflict("IDEMPOTENCY_STATE_CONFLICT", "Broker outcome contradicts terminal non-submission");
+
+        if (normalUpdatedAt !== null) {
+          const transition = await recordIdempotencyOutcomeInTransaction(tx, {
+            adapterId: p.adapterId, environment: p.environment, idempotencyKey: p.idempotencyKey,
+            executionAttemptId: p.executionAttemptId, operation: p.operation,
+            requestFingerprint: p.requestFingerprint, status: "FAILED_NOT_SUBMITTED",
+            updatedAt: normalUpdatedAt,
+          });
+          if (transition.status !== "APPLIED_TRANSITION"
+              || transition.record.status !== "FAILED_NOT_SUBMITTED"
+              || transition.record.adapterOrderId !== undefined
+              || transition.record.adapterId !== p.adapterId
+              || transition.record.environment !== p.environment
+              || transition.record.idempotencyKey !== p.idempotencyKey
+              || transition.record.operation !== p.operation
+              || transition.record.executionAttemptId !== p.executionAttemptId
+              || transition.record.requestFingerprint !== p.requestFingerprint) {
+            conflict("IDEMPOTENCY_STATE_CONFLICT", "Exact broker terminal transition was not applied");
+          }
+        }
 
         const receipt = createTerminalNonSubmissionDispositionReceiptV1({
           schemaVersion: TERMINAL_NON_SUBMISSION_DISPOSITION_RECEIPT_V1, disposition: candidate,

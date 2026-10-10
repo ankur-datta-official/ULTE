@@ -1,0 +1,159 @@
+Task044B / Phase33C D3N atomic normal-flow terminal closure audit
+
+VERDICT = FINAL PASS
+BASELINE HEAD = 53f6fbe25a7072f3514b9ae828f0b7390edb984f
+BASELINE origin/main = 53f6fbe25a7072f3514b9ae828f0b7390edb984f
+BASELINE worktree = only the untracked D4 audit and Task044A design audit
+Task044A design reference = PHASE33C_D3N_PRE0_NORMAL_FLOW_TERMINAL_CLOSURE_DESIGN_AUDIT.txt
+
+Files changed in Task044B:
+  packages/execution-store-postgres/src/idempotency-repository.ts
+  packages/orchestration-state-store-postgres/src/fenced-writer-service.ts
+  packages/orchestration-state-store-postgres/src/fenced-writer-service.test.ts
+  packages/orchestration-state-store-postgres/src/index.ts
+  packages/orchestration-state-store-postgres/src/terminal-commit-service.ts
+  tests/integration/b1f-postgres-helper.ts
+  tests/integration/d3n-postgres.test.ts
+  vitest.postgres.config.ts
+  PHASE33C_D3N_ATOMIC_NORMAL_FLOW_TERMINAL_CLOSURE_AUDIT.txt
+The two pre-existing untracked audits were preserved unchanged.
+
+Public API and trusted proof
+PostgresTerminalNonSubmissionCommitService now has separate public methods:
+commitTerminalNonSubmissionDisposition remains the historical D3 method;
+commitNormalTerminalNonSubmissionDisposition accepts a dedicated
+NormalTerminalNonSubmissionRequest. The latter requires the full D1 logical
+disposition, mandatory TerminalNonSubmissionProofV1 narrowed at the type level
+to sourceKind=TRUSTED_ADAPTER_FAILURE, an explicit brokerStatusUpdatedAt, and
+the existing owner/fence/revision/session/pending/broker authority. Runtime
+validation rejects REVIEWED_LEGACY_ATTESTATION, malformed proof, retry-safe
+failure, possible submission, wrong identity, and invalid chronology. The
+caller must obtain the trusted typed failure after provider activity; this
+persistence service creates no proof and performs no provider/broker I/O.
+
+Normal transaction
+1. Validate the D1 disposition/proof and explicit timestamp.
+2. Start one physical transaction on the executor's pinned connection and
+   verify exact D2C capability, database, schema, and search_path.
+3. Read immutable receipt by ref, session, and exact broker triple before
+   checking current broker status. Exact logical replay returns
+   ALREADY_COMMITTED; conflicting replay returns RECEIPT_CONFLICT.
+4. Lock/check lease at DB time; recheck receipt after lease serialization.
+5. Lock recovery V1, validate revision/fence and frozen checkpoint, execution,
+   mode, instrument, risk, and latest-R authority.
+6. Lock exact pending PENDING row, validate null resolution fields, creation
+   receipt, and execution checkpoint ancestry.
+7. Lock exact broker row by adapter_id, environment, idempotency_key; require
+   same operation/attempt/fingerprint, SUBMITTED, no adapterOrderId. Reject
+   FAILED_NOT_SUBMITTED without receipt, OUTCOME_UNKNOWN, RETRY_AUTHORIZED,
+   CONFIRMED, REJECTED, CLAIMED, or wrong identity.
+8. Reject linked canonical and incompatible broker outcomes. Require proof
+   observation at or after locked broker updatedAt and brokerStatusUpdatedAt
+   at or after proof.observedAt. No wall-clock timestamp is generated.
+9. Call recordIdempotencyOutcomeInTransaction on the SAME transaction with
+   exact identity, FAILED_NOT_SUBMITTED, and brokerStatusUpdatedAt. Require
+   APPLIED_TRANSITION with exact returned record and no adapterOrderId.
+10. Insert immutable receipt containing the exact supplied proof, resolve
+    pending TERMINAL_NON_SUBMISSION to the disposition ref at revision r+1
+    and same fence, CAS recovery V2 to that ref/revision, verify all frozen
+    authority, recheck lease at DB time, and commit.
+Any pre-COMMIT failure rolls back the broker status, receipt, pending, and
+recovery together. The lock order is lease, recovery, pending, broker, receipt
+write. Receipt pre-reads are read-only.
+
+The existing execution-store transaction-bound helper was sufficient. Real
+PostgreSQL exposed an existing ambiguous null parameter in its outcome update;
+the optional adapter-order parameter now has an explicit ::text cast. This
+does not change idempotency status semantics. The existing state machine and
+PostgreSQL trigger both permit SUBMITTED -> FAILED_NOT_SUBMITTED. No migration
+was added. NEW_MIGRATION_REQUIRED = NO.
+
+Historical D3 and retries
+Historical D3 still requires an already durable FAILED_NOT_SUBMITTED row,
+PENDING effect, exact caller-supplied trusted D1 proof, and the existing
+authority checks. It does not perform a broker transition. Normal and
+historical fresh paths have mutually exclusive broker starting states.
+After a successful normal COMMIT, a lost response retry reads the receipt
+first and returns ALREADY_COMMITTED without a second broker transition,
+receipt, pending resolution, or recovery advance. A changed logical proof
+fails RECEIPT_CONFLICT. A no-receipt FAILED_NOT_SUBMITTED row is never normal
+success.
+
+Split-state and concurrency gates
+The fenced writer's generic status method now excludes FAILED_NOT_SUBMITTED
+at the type level and rejects it at runtime before any database I/O. D3N is
+the orchestration persistence entry point for future normal terminal closure.
+The lower-level execution idempotency repository remains a general domain
+store; future C2B3 composition must route trusted normal terminal failures
+through D3N, not make a split repository call. A deterministic real race
+proves that when D3N owns the broker row, a direct legacy status writer blocks
+on a distinct backend and returns DUPLICATE_SAME only after D3N commits.
+Identical and conflicting D3N races pause A after its real lease row lock,
+observe B's conflicting lease query on a distinct backend, and require the
+observer's pg_blocking_pids(B_PID) to contain A_PID. Identical requests yield
+COMMITTED/ALREADY_COMMITTED; conflicting proof yields COMMITTED/
+RECEIPT_CONFLICT. Both leave one receipt, one terminal pending resolution,
+one recovery revision advance, and one broker status transition.
+
+Rollback, negative, and capability proof
+Real tests inject failures before the broker update, after its update, after
+receipt insertion, after pending resolution, after recovery CAS, at final
+lease expiry, and immediately before COMMIT. Each proves durable broker
+SUBMITTED, pending PENDING, no terminal receipt/ref, and unchanged recovery
+revision. Negative tests cover every incompatible broker status; order ID;
+adapter, environment, key, operation, attempt, and fingerprint mismatches;
+reviewed, malformed, retry-safe, wrong-identity and chronologically invalid
+proof; canonical acceptance/rejection, contradictory disposition; stale
+fence, takeover, lease/recovery fence mismatch; and wrong database/schema.
+The full D2C capability verifier runs on the same transaction connection.
+
+Validation on the final worktree
+- Root TypeScript build: PASS.
+- PostgreSQL test TypeScript check: PASS.
+- Focused execution-store, orchestration-state-store-postgres, and migration
+  coordinator suites: 175/175 PASS.
+- D3N real PostgreSQL: 32/32 PASS on the final source/harness.
+- Historical D3 real PostgreSQL: 17/17 PASS.
+- D2C real PostgreSQL: 8/8 PASS.
+- B1F real PostgreSQL: all 15 cases PASS across bounded P (4), A (5), L (3),
+  and X (3) runs on the final harness. The longer combined attempts were
+  interrupted by an external PostgreSQL administrator fast shutdown; those
+  interrupted runs are not counted as regression results.
+- git diff --check: PASS.
+
+PostgreSQL test security
+The existing WSL2 PostgreSQL 18.6 test database ulte_b1f_test and non-superuser
+ulte_test were used. The credential URL was not inherited. Each real run used
+the approved temporary trust rule for the dynamically discovered Windows
+host /32, with an exact pg_hba.conf backup and SHA-256 check. Every run's
+finally block restored exact bytes, verified SHA-256
+dd4247892b7a3843814dc485cb55df577103fa4ecf97a9c81f9d2c79ea989e67,
+reloaded PostgreSQL, proved the temporary rule absent, and removed its backup.
+No password, address, URL, or bridge script was written to the repository.
+
+D4 consequence and non-goals
+D4 can resume with exact closed TERMINAL_NON_SUBMISSION hydration. Bare legacy
+FAILED_NOT_SUBMITTED + PENDING still lacks a pre-closure proof source and must
+remain RECOVERY_REJECTED; boot must never fabricate a proof. D4 boot activation,
+C2B3 runtime cutover, D5 full race matrix, and the separate canonical
+CONFIRMED_REJECTED reconciliation blocker were not implemented here. No
+automatic trade submission, retry authorization, or reconciliation was added.
+
+D3N_NORMAL_ATOMIC_CLOSURE = PASS
+TRUSTED_PROOF_GATE = PASS
+SUBMITTED_START_GATE = PASS
+ATOMIC_BROKER_STATUS_TRANSITION = PASS
+TERMINAL_RECEIPT = PASS
+PENDING_TERMINAL_RESOLUTION = PASS
+RECOVERY_TERMINAL_REF = PASS
+ROLLBACK_INCLUDES_BROKER_STATUS = PASS
+LOST_COMMIT_RECOVERY = PASS
+IDENTICAL_D3N_BLOCKING_RACE = PASS
+CONFLICTING_D3N_BLOCKING_RACE = PASS
+CAPABILITY_GATE = PASS
+HISTORICAL_D3_UNCHANGED = PASS
+REAL_POSTGRES_VERIFIED_FOR_D3N = YES
+D4_CAN_RESUME = YES
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+Commit/push = none

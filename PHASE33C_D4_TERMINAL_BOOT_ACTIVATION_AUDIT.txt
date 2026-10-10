@@ -1,0 +1,61 @@
+Task043 / Phase33C D4 terminal boot activation audit
+
+VERDICT = HARD STOP
+BASELINE HEAD = 53f6fbe25a7072f3514b9ae828f0b7390edb984f
+BASELINE origin/main = 53f6fbe25a7072f3514b9ae828f0b7390edb984f
+BASELINE worktree = clean
+
+Blocking invariant
+The D1 RecoveryBootResult.TERMINAL_NON_SUBMISSION_REQUIRED contract requires a
+TerminalNonSubmissionProofV1. That proof requires a source kind, source event
+reference, observation time, normalized failure category, definite-failure
+certainty, non-submission exposure, DO_NOT_RETRY disposition, and exact pending
+identity. A historical FAILED_NOT_SUBMITTED broker idempotency row stores only
+identity, status, timestamps, and optional adapter order ID. It cannot supply
+the required proof. The broker audit schema is append-only but has no mandatory
+link from the idempotency row and does not encode the full D1 proof. The D3 real
+PostgreSQL fixture demonstrates the gap: it inserts a broker row with status
+FAILED_NOT_SUBMITTED, then constructs the proof separately in memory before
+calling the D3 commit service. D3 persists the supplied proof only upon closure.
+
+Source evidence
+- packages/sandbox-orchestration-recovery/src/types.ts: required-action result
+  has a mandatory proof field.
+- packages/orchestration-state-store/src/terminal-non-submission-disposition.ts:
+  TerminalNonSubmissionProofV1 and its constructor require exact proof fields.
+- packages/execution-store-postgres/migrations/0001_execution_store.sql:
+  broker_idempotency_records has no proof or failure category fields; broker
+  audit events have no mandatory foreign key to the idempotency row.
+- packages/broker-adapters/src/idempotency.ts: IdempotencyRecord has no proof.
+- tests/integration/d3-postgres.test.ts: prepared() seeds the broker status and
+  separately supplies a proof object to D3.
+- packages/orchestration-state-store-postgres/src/terminal-commit-service.ts:
+  D3 validates the broker row and persists the caller-supplied proof in the
+  terminal receipt; it cannot retrieve that proof before the commit.
+
+Existing boot architecture discovered
+- packages/sandbox-orchestration-recovery/src/classify.ts contains the pure C1
+  classifier. It still rejects FAILED_NOT_SUBMITTED as
+  UNSUPPORTED_TERMINAL_NON_SUBMISSION.
+- No production recovery boot loader or dispatcher currently calls this
+  classifier. PostgreSQL stores expose transactional recovery, checkpoint,
+  pending, outcome, receipt, and lease primitives. D3 owns the atomic terminal
+  commit and immutable receipt. A coherent D4 boot composition would need a
+  pinned repeatable-read transaction before collecting multiple facts.
+
+No classifier, loader, hydration, dispatch, schema, or D3 production changes
+were made. No tests or real PostgreSQL D4 suite were run because the required
+action authority cannot be constructed without fabricating evidence. The D4
+corruption matrix and D3-uncommitted boot coherence race remain unimplemented.
+
+Required design resolution
+Provide an approved way to obtain an exact, trusted historical D1 proof before
+D3 closure, or explicitly revise the D1 required-action result so boot can
+report the durable status without claiming to have that proof. The task forbids
+inventing proof during boot, adding migration 0007, and changing D3 semantics.
+
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+REAL_POSTGRES_VERIFIED_FOR_D4 = NO
+HBA/security bridge = not used; no restoration needed
+Commit/push = none

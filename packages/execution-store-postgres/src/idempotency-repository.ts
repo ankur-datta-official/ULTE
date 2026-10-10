@@ -61,7 +61,7 @@ WHERE adapter_id = $1
   AND request_fingerprint = $6
   AND status = $10
   AND updated_at_ms <= $8
-  AND (adapter_order_id IS NULL OR $9 IS NULL OR adapter_order_id = $9)
+  AND (adapter_order_id IS NULL OR $9::text IS NULL OR adapter_order_id = $9)
 RETURNING ${RETURNING_COLUMNS}`;
 
 const ENRICHMENT_UPDATE_SQL = `/* execution-store-postgres:outcome-enrich */

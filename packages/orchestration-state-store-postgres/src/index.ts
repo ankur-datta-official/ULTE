@@ -3,7 +3,7 @@ export { PostgresOrchestrationRecoveryStore, saveRecoveryStateInTransaction,
 export { PostgresOrchestrationCommitService } from "./commit-service.js";
 export { PostgresTerminalNonSubmissionCommitService, TerminalCommitError } from "./terminal-commit-service.js";
 export type { CommitTerminalNonSubmissionDispositionRequest, TerminalCommitResult,
-  TerminalCommitFailureCode } from "./terminal-commit-service.js";
+  TerminalCommitFailureCode, NormalTerminalNonSubmissionRequest } from "./terminal-commit-service.js";
 export { PostgresOrchestrationFencedWriterService } from "./fenced-writer-service.js";
 export type { PendingWriterAuthority, PendingWriterFailure, PendingWriterResult,
   PendingClaimRequest, PendingStatusRequest, PendingOutcomeRequest,
