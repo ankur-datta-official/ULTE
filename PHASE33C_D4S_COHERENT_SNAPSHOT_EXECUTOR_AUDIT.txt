@@ -1,0 +1,126 @@
+Task046B / Phase33C D4S coherent snapshot executor implementation
+
+VERDICT = FINAL PASS
+REAL_POSTGRES_VERIFIED_FOR_D4S = YES
+D4_CAN_RESUME = YES (D4 query-only loaders, boot composition, classifier and hydration remain future work)
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+NEW_MIGRATION_REQUIRED = NO
+Commit/push = none
+
+BASELINE
+HEAD = a817a121b3db9b0c2f660043d094706532c34204
+origin/main = a817a121b3db9b0c2f660043d094706532c34204
+Initial status contained exactly the two expected untracked audits:
+?? PHASE33C_D4S_PRE0_COHERENT_SNAPSHOT_EXECUTOR_DESIGN_AUDIT.txt
+?? PHASE33C_D4_REVISED_TERMINAL_BOOT_ACTIVATION_AUDIT.txt
+Both were preserved unchanged. PROJECT_SPEC.md and the design audit were read.
+
+CHANGED FILES
+packages/orchestration-state-store-postgres/src/postgres.ts
+packages/orchestration-state-store-postgres/src/index.ts
+packages/orchestration-state-store-postgres/src/postgres.api-contract.compile-test.ts (new)
+tests/integration/b1f-postgres-helper.ts
+tests/integration/d4s-postgres.test.ts (new)
+tsconfig.postgres.json
+vitest.config.ts
+vitest.postgres.config.ts
+PHASE33C_D4S_COHERENT_SNAPSHOT_EXECUTOR_AUDIT.txt (new)
+No execution-store-postgres source, trading code, D4 loader/classifier,
+migration, or existing audit changed.
+
+PUBLIC CONTRACT AND TYPE BOUNDARY
+@ulte/orchestration-state-store-postgres exports:
+  interface PostgresSnapshotExecutor extends PostgresExecutor {
+    snapshot<T>(work: (transaction: PostgresTransaction) => Promise<T>): Promise<T>;
+  }
+snapshot() is a required method. The ordinary PostgresExecutor interface is
+unchanged. The compile-only contract test proves a plain PostgresExecutor is
+not assignable to PostgresSnapshotExecutor, the latter still extends the
+writer executor, and snapshot is required. No optional isolation argument,
+caller-supplied isolation string, or executor cast supplies this capability.
+Existing writer fakes remain plain PostgresExecutor implementations. The
+separate execution-store-postgres PostgresExecutor remains unchanged; its
+readIdempotencyInTransaction accepts the snapshot's query-capable transaction
+structurally, as existing cross-package transaction-bound calls already do.
+The migration coordinator's verifyTerminalSchemaCapabilityOnClient can use
+the existing non-owning adapter pattern from terminal-commit-service:
+query forwards to tx.query(sql, params ?? []), release is a no-op. No new
+adapter or migration connection was introduced.
+
+REAL EXECUTOR SEMANTICS
+RealPostgresExecutor now implements PostgresSnapshotExecutor. snapshot() does:
+1. pool.connect() once; bind and verify search_path on that client before BEGIN.
+2. Fixed SQL: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY.
+3. SET LOCAL statement_timeout = 15000 and lock_timeout = 10000.
+4. Probe pg_backend_pid() after isolation is established.
+5. Invoke the callback with a transaction whose queries use that same client,
+   including the existing bounded beforeQuery/afterQuery hook path.
+6. COMMIT on success; ROLLBACK on callback/query/commit error; release client
+   in finally. A rollback failure is paired with the original error.
+No executor.query(), nested checkout, provider, or broker call occurs inside
+snapshot(). The existing transaction(work) code remains BEGIN followed by
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED, its timeouts, callback,
+COMMIT/ROLLBACK, and release. Snapshot neither consumes nor fires the
+writer-only loseNextCommitResponse and failNextCommit flags.
+
+REAL POSTGRESQL PROOFS
+The dedicated tests/integration/d4s-postgres.test.ts ran against the disposable
+ulte_b1f_test database and generated schema on PostgreSQL 18.6. Six tests pass:
+* Server settings inside snapshot are repeatable read and read-only on;
+  ordinary writer settings are read committed and read-only off. The writer
+  successfully updates a row.
+* PostgreSQL rejects INSERT and SELECT ... FOR UPDATE in snapshot with SQLSTATE
+  25006. The rejected INSERT adds no row.
+* Multiple callback reads report the same backend PID and verified generated
+  schema/pg_catalog path. The source uses one pool checkout and pinned client.
+* An explicit barrier holds B's snapshot after reading version 1. Distinct
+  writer backend A commits version 2. B still reads version 1; a new snapshot
+  reads version 2. This is not sleep-only synchronization.
+* A callback error after a query invokes the rollback path; the pool has no
+  checked-out client, and the same backend can be checked out afterward in
+  read committed/read-write state. The disposable schema cleanup succeeds.
+  The D4S test wrapper pairs any work and cleanup errors in AggregateError.
+* A bounded query hook pauses an actual pinned callback query and is cleared
+  safely. The checkpoint:load marker was added to the shared hook inventory.
+* A snapshot leaves both writer fault flags armed. The following ordinary
+  writer receives the synthetic lost-COMMIT response after a durable update;
+  the following fail-COMMIT writer rolls back its update.
+
+RESULTS (fresh final run)
+D4S_REAL_POSTGRES = 6/6 PASS; focused rerun after final test assertions = 6/6 PASS
+B1F_REAL_POSTGRES = 15/15 PASS
+D3_REAL_POSTGRES = 17/17 PASS
+D3N_REAL_POSTGRES = 32/32 PASS
+D2C_REAL_POSTGRES = 8/8 PASS
+Combined explicit PostgreSQL Vitest config = 78/78 PASS, five files.
+orchestration-state-store-postgres plus migration-coordinator unit tests =
+126/126 PASS, 11 files.
+Root tsc --build = PASS.
+PostgreSQL tsc --noEmit --project tsconfig.postgres.json = PASS.
+git diff --check = PASS.
+
+ENVIRONMENT / HBA RESTORATION
+ULTE_TEST_POSTGRES_URL was absent. The approved narrow bridge used only
+database ulte_b1f_test, role ulte_test, dynamically discovered Windows-host
+IPv4 /32, and trust. No password or bridge script entered the repository.
+Before the successful run, an exact HBA backup and SHA-256 were taken. WSL
+was kept active during Vitest because its prior idle shutdown interrupted the
+first real run. The final test wrapper restored exact HBA bytes, verified the
+original SHA-256
+dd4247892b7a3843814dc485cb55df577103fa4ecf97a9c81f9d2c79ea989e67,
+reloaded PostgreSQL, proved the temporary rule absent, and removed the backup.
+An earlier interrupted run is not counted as a pass: WSL shut down during
+D3N, making later suites fail to connect. That restart erased a backup under
+/tmp; the single inserted HBA first line was removed and the original SHA-256
+verified before the stable rerun. A later focused D4S attempt exposed two
+test-harness assertions, which were corrected. The final full and focused
+runs above are fresh and pass.
+
+SCOPE / NEXT GATE
+Full D3N pre-commit/post-commit terminal authority-tuple race is deferred to
+D4 after the non-locking recovery, keyed-pending, and lease snapshot loaders
+exist. The D4S version-row race proves executor snapshot visibility, not
+terminal classifier behavior. D4 boot loader, classifier, hydration, READY
+gates, dispatcher, D5 matrix, and C2B3 cutover remain unimplemented here.
+No migration 0007 or execution-store executor widening was needed.

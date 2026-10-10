@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Pool, type PoolClient } from "pg";
 import { runMigrations, type MigrationTarget } from "../../tools/migration-coordinator/src/index.js";
-import type { PostgresExecutor, PostgresQueryResult, PostgresTransaction } from "../../packages/orchestration-state-store-postgres/src/postgres.js";
+import type { PostgresQueryResult, PostgresSnapshotExecutor, PostgresTransaction } from "../../packages/orchestration-state-store-postgres/src/postgres.js";
 
 const migrations = [
   "0001_orchestration_recovery_state.sql",
@@ -25,7 +25,7 @@ const markers = ["receipt:pending-load", "receipt:adoption-load",
   "receipt:terminal-ref-load", "receipt:terminal-insert", "effect:terminal-resolve",
   "orchestration-state-store-postgres:terminal-update",
   "orchestration-state-store-postgres:lease-lock", "orchestration-state-store-postgres:lease-clock",
-  "checkpoint:insert", "effect:pending-load", "effect:pending-resolve",
+  "checkpoint:insert", "checkpoint:load", "effect:pending-load", "effect:pending-resolve",
   "effect:pending-insert", "save-update", "receipt:pending-insert",
   "receipt:adoption-insert"] as const;
 export type Marker = typeof markers[number];
@@ -58,7 +58,7 @@ export async function bounded<T>(promise: Promise<T>, label: string, ms = 19000)
   } finally { clearTimeout(timeout); }
 }
 
-export class RealPostgresExecutor implements PostgresExecutor {
+export class RealPostgresExecutor implements PostgresSnapshotExecutor {
   public beforeQuery: QueryHook | undefined;
   public afterQuery: QueryHook | undefined;
   public loseNextCommitResponse = false;
@@ -132,6 +132,38 @@ export class RealPostgresExecutor implements PostgresExecutor {
       if (began && !committed) {
         try { await client.query("ROLLBACK"); }
         catch (rollbackError) { throw new AggregateError([error, rollbackError], "B1F rollback failed"); }
+      }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  public async snapshot<T>(work: (transaction: PostgresTransaction) => Promise<T>): Promise<T> {
+    this.lastTransactionPid = undefined;
+    const client = await this.pool.connect();
+    let began = false;
+    let committed = false;
+    try {
+      await this.bind(client);
+      await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      began = true;
+      await client.query("SET LOCAL statement_timeout = 15000");
+      await client.query("SET LOCAL lock_timeout = 10000");
+      this.lastTransactionPid = (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+      const tx: PostgresTransaction = { query: async <Row>(sql: string, params: readonly unknown[]) => {
+        const marker = markerOf(sql);
+        if (marker && this.beforeQuery) await bounded(Promise.resolve(this.beforeQuery(marker)), `before ${marker}`);
+        const result = await client.query(sql, [...params]);
+        if (marker && this.afterQuery) await bounded(Promise.resolve(this.afterQuery(marker)), `after ${marker}`);
+        return { rows: result.rows as Row[], rowCount: result.rowCount ?? 0 };
+      } };
+      const result = await work(tx);
+      await client.query("COMMIT");
+      committed = true;
+      return result;
+    } catch (error) {
+      if (began && !committed) {
+        try { await client.query("ROLLBACK"); }
+        catch (rollbackError) { throw new AggregateError([error, rollbackError], "B1F snapshot rollback failed"); }
       }
       throw error;
     } finally { client.release(); }

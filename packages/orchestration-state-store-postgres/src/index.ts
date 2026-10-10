@@ -24,4 +24,5 @@ export { loadTerminalNonSubmissionDispositionReceiptInTransaction,
   loadTerminalNonSubmissionDispositionReceiptByIdentityInTransaction } from "./receipt-store.js";
 export type { AdoptionCreationProofLookupResult, ReceiptAppendResult } from "./receipt-store.js";
 export { PersistenceConflictError, PersistenceCorruptionError, PersistenceInfrastructureError } from "./errors.js";
-export type { PostgresExecutor, PostgresQueryResult, PostgresTransaction } from "./postgres.js";
+export type { PostgresExecutor, PostgresQueryResult, PostgresSnapshotExecutor,
+  PostgresTransaction } from "./postgres.js";

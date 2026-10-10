@@ -1,0 +1,244 @@
+Task046A / Phase33C D4S PRE0 coherent snapshot executor design
+SOURCE-ONLY DESIGN. No implementation, tests, PostgreSQL run, migration, commit, or push.
+
+BASELINE AND VERDICT
+HEAD = a817a121b3db9b0c2f660043d094706532c34204
+origin/main = a817a121b3db9b0c2f660043d094706532c34204
+Initial git status --short:
+?? PHASE33C_D4_REVISED_TERMINAL_BOOT_ACTIVATION_AUDIT.txt
+That audit was read and preserved unchanged.
+
+VERDICT = DESIGN PASS (architecture only; D4 remains stopped)
+D4_REQUIRES_DATABASE_SNAPSHOT = YES
+SELECTED_CONTRACT = EXPLICIT_SNAPSHOT_EXECUTOR
+SNAPSHOT_ISOLATION = REPEATABLE_READ
+SNAPSHOT_READ_ONLY = YES
+PLAIN_EXECUTOR_CANNOT_SATISFY_SNAPSHOT = YES
+ORDINARY_WRITER_ISOLATION_UNCHANGED = YES
+NEW_MIGRATION_REQUIRED = NO
+D4_CAN_RESUME_AFTER_D4S = YES, conditional on the proof and regressions below
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+
+SOURCE INVENTORY / IMPACT MAP
+* packages/orchestration-state-store-postgres/src/postgres.ts defines its own
+  PostgresQueryResult, query-only PostgresTransaction, and PostgresExecutor
+  (query plus transaction(work)); src/index.ts exports them. This is the narrow
+  home of the new boot snapshot capability. Its writer consumers are
+  recovery-store, lease-store, effect-store, checkpoint-store, receipt-store,
+  commit-service, fenced-writer-service, and terminal-commit-service.
+* packages/execution-store-postgres/src/postgres.ts independently defines the
+  same three structural shapes. src/index.ts exports them. Its consumers are
+  idempotency-repository and audit-sink. Do not extend this executor interface.
+* The only real executor in this repository is
+  tests/integration/b1f-postgres-helper.ts:RealPostgresExecutor. It implements
+  the orchestration interface, pins pool.connect() for transaction(work), binds
+  and verifies search_path, BEGINs, explicitly SET TRANSACTION ISOLATION LEVEL
+  READ COMMITTED, applies SET LOCAL statement_timeout/lock_timeout, SELECTs
+  pg_backend_pid(), then calls work(tx). It commits or rolls back, releases
+  the client, and supports writer lost-COMMIT/fail-COMMIT simulations. Its
+  query() uses a separate checkout; D4 must never call it inside snapshot.
+  B1fDatabase exposes a, b, observer instances backed by one pool.
+* Orchestration PostgresExecutor fakes: recovery-store.test.ts,
+  lease-store.test.ts, effect-store.test.ts, checkpoint-store.test.ts,
+  receipt-store.test.ts, terminal-receipt-loader.test.ts,
+  commit-service.test.ts, fenced-writer-service.test.ts, and
+  terminal-commit-service.test.ts (last is an object literal). Execution-store
+  has FakePostgresExecutor plus one object-literal executor in
+  execution-store-postgres.test.ts. None needs snapshot solely for writer tests.
+* Integration users of RealPostgresExecutor are b1f-postgres.test.ts,
+  d3-postgres.test.ts, and d3n-postgres.test.ts. d2c-postgres.test.ts uses
+  migration connections directly. The migration coordinator defines
+  MigrationConnectionSource/PinnedMigrationClient, not PostgresExecutor;
+  runMigrations owns a separate migration connection and must not be invoked
+  during D4 boot. Its verifyTerminalSchemaCapabilityOnClient can use a thin
+  non-owning adapter over the snapshot tx, as terminal-commit-service already
+  demonstrates. No release or second checkout from that adapter.
+* A repository-wide source search found no other PostgresExecutor definitions,
+  transaction implementations, or structural implementers. Other package
+  transaction concepts are outside these two PostgreSQL executor contracts.
+
+WHY A DATABASE SNAPSHOT IS REQUIRED
+D4 must compose recovery state, lease/fence, terminal receipt, resolved and
+unresolved pending effects, broker idempotency, checkpoint and its ancestry,
+creation/adoption receipts, linked outcomes, and D2C terminal capability/
+topology. These live in multiple tables and require multiple statements.
+READ COMMITTED takes a new statement snapshot on each SELECT. B can read a
+pre-D3N recovery component, A can atomically commit the D3N tuple, then B can
+read post-D3N receipt/pending/broker components. Atomic writer commit alone
+does not make B's multi-statement view atomic.
+
+There is no proven common lock or revision-reload algorithm for every read.
+Fenced orchestration writers lock the lease/recovery path; terminal-commit-
+service also locks broker, but lower-level execution-store-postgres can claim
+or update broker idempotency through its own transaction without first taking
+the orchestration lease. Its ordinary read is non-locking. Checkpoint and
+receipt reads are separate and immutable rows do not serialize the whole
+tuple. The lease's fresh clock check protects writer authorization, not a
+cross-table read view. A boot-only lease lock would also mutate read semantics
+and still not serialize independent broker writes. Freeze database snapshot.
+
+DESIGNS CONSIDERED
+A. transaction(work, { isolationLevel?: ... }): REJECT. TypeScript permits a
+   one-argument method to satisfy a method with an additional optional
+   argument. Existing fakes/implementations could silently ignore D4's
+   isolation request. Documentation cannot repair that structural loophole.
+B. Required transactionWithIsolation(closedUnion, work): technically safe if
+   required on the executor and mapped only to hardcoded SQL constants; no
+   arbitrary caller text in BEGIN. It enforces implementation at compile time
+   but broadens every writer fake or requires a second interface, exposes
+   isolation choices to callers that need only one safe mode, and creates a
+   larger misuse surface. Keep ordinary transaction(work) compatible. No
+   arbitrary string interpolation into transaction SQL.
+C. Dedicated snapshot method on an additive interface: SELECT. It expresses
+   D4's actual requirement, preserves the old writer interface and tests,
+   and prevents a plain one-method executor from satisfying D4's constructor.
+   Proposed exported contract in orchestration-state-store-postgres:
+
+   interface PostgresSnapshotExecutor extends PostgresExecutor {
+     snapshot<T>(work: (tx: PostgresTransaction) => Promise<T>): Promise<T>;
+   }
+
+   Semantics, which are part of this contract: one checked-out physical
+   connection; BEGIN with REPEATABLE READ and READ ONLY before any
+   transaction query; every callback read on the same tx/snapshot; COMMIT
+   on success; ROLLBACK on callback failure; no nested checkout; no broker or
+   provider I/O implication. The server enforces READ ONLY, but TypeScript's
+   query(sql) cannot prove SELECT-only SQL at compile time. D4 code must use
+   reviewed non-locking loaders, and tests must catch accidental FOR UPDATE.
+   A plain PostgresExecutor lacks required snapshot(), so it cannot be
+   assigned to PostgresSnapshotExecutor without an explicit implementation or
+   adapter. An unsafe adapter or cast would be a code-review violation; the
+   type system cannot forbid deliberate casts.
+
+READ ONLY / BEGIN ORDER
+Choose REPEATABLE READ READ ONLY. D4 boot is an authority reader and should
+have no ability to change rows. Current loadRecoveryStateForUpdateInTransaction,
+loadPendingEffectForUpdateInTransaction, and
+assertActiveRecoveryLeaseInTransaction issue SELECT ... FOR UPDATE; PostgreSQL
+rejects row locking in READ ONLY transactions. Do not call them from D4.
+Add non-locking transaction-bound recovery, keyed pending, and lease/fence
+loaders in the later D4 implementation. These reuse mapping and validation,
+not the writer lock path. The current transaction-bound receipt, checkpoint,
+outcome, unresolved list, and broker read functions are query-only.
+
+Required real-executor statement order:
+1. pool.connect() once; ensure a clean, non-transactional checked-out client.
+2. On that client, SET search_path and verify database/schema/path, before
+   BEGIN. This session/connection setup may safely run before BEGIN; it cannot
+   create the later transaction's data snapshot. Do not use executor.query(),
+   which checks out another client. Reject a poisoned connection.
+3. BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY (hardcoded SQL).
+4. SET LOCAL statement_timeout = 15000 and lock_timeout = 10000 (or preserve
+   the existing policy if adjusted explicitly); optional backend-PID probe.
+   These occur after isolation is fixed and before work. Never run an
+   authority SELECT and then attempt SET TRANSACTION isolation.
+5. Invoke work with a tx whose query uses only that pinned client. All D4
+   authority and D2C catalog queries use this tx. COMMIT on success; ROLLBACK
+   on callback/query failure, preserving rollback-error reporting and release.
+
+The existing transaction(work) must retain its READ COMMITTED BEGIN/SET
+behavior and writer failure semantics. A shared private runTransaction(mode,
+work) is possible, with fixed SQL per mode; it must not silently upgrade
+D3/D3N/B1F writers to REPEATABLE READ. Lost-COMMIT and fail-COMMIT simulation
+are writer-specific and must not be consumed or fired by snapshot(); a read-
+only commit has no durable write outcome to make ambiguous. Preserve those
+flags for the next ordinary writer transaction. Preserve search_path checks,
+query hooks, timeouts, rollback and physical connection pinning for both.
+An open READ ONLY snapshot is historical evidence, not a guarantee that a
+lease remains valid forever. Later D4 must define a fresh lease/fence gate
+before any subsequent action and never treat snapshot alone as live execution
+authorization; READY remains prohibited here.
+
+PRODUCTION BOUNDARY / STRUCTURAL COMPATIBILITY
+Export PostgresSnapshotExecutor only from @ulte/orchestration-state-store-
+postgres. Future PostgresRecoveryBootLoader constructor requires that type,
+not PostgresExecutor. It calls exactly one snapshot(async tx => ...) for all
+durable reads and passes that exact tx to every loader, including broker and
+capability verification. It must not invoke a repository's own transaction(),
+the executor's outside-pool query(), verifyTerminalSchemaCapability(source),
+or any broker/provider operation while composing authority. The two packages'
+PostgresTransaction interfaces both require the same generic query(sql,
+params) returning rows and numeric rowCount; therefore the orchestration tx
+is structurally assignable to execution-store-postgres's
+readIdempotencyInTransaction(tx, adapterId, key). Existing fenced-writer and
+terminal-commit services already pass orchestration tx objects to lower-level
+execution-store transaction-bound helpers. Broker read returns an optional
+record and detects ambiguous cross-environment rows; D4 must validate exact
+environment/identity and fail closed, not coerce missing to success.
+The D2C verifier's PinnedMigrationClient also requires release() and optional
+query params, so adapt as terminal-commit-service does: query forwards to
+tx.query(sql, params ?? []), release is a no-op. This adapter never owns a
+connection. Its catalog and ledger queries must run in the snapshot.
+
+D4 QUERY-ONLY LOADER INVENTORY (current source, before D4 implementation)
+AVAILABLE: terminal receipt by ref/session/identity (receipt-store.ts);
+pending creation receipt by adapter/key and adoption creation proof by
+session/revision/identity (receipt-store.ts); adoption receipt by outcome key;
+checkpoint by ref (checkpoint-store.ts), including ancestry by loading
+referenced checkpoints; unresolved pending list, outcomes by session/attempt,
+and outcome by key (effect-store.ts); broker idempotency by adapter/key
+(execution-store-postgres/idempotency-repository.ts). These functions accept
+the caller's transaction and do not lock rows or open another transaction.
+AVAILABLE_BUT_LOCKING: recovery by session
+(loadRecoveryStateForUpdateInTransaction), keyed pending including resolved
+state (loadPendingEffectForUpdateInTransaction), and lease/fence validity
+(assertActiveRecoveryLeaseInTransaction). They require replacement/query-only
+transaction-bound variants before use in READ ONLY boot.
+MISSING_TRANSACTION_BOUND_READ: public non-locking recovery load exists only
+through executor.query(); public non-locking keyed pending load exists only
+through its store method; neither has a query-only transaction export. Lease
+has no equivalent query-only snapshot loader. D2C capability verification has
+an on-client function, but needs the non-owning tx adapter above, not a new
+schema loader. A complete pending/receipt enumeration policy for terminal
+contradictions must be finalized in D4: current unresolved list excludes
+resolved rows, so use a keyed resolved-pending lookup from receipt identity
+and explicitly assess whether any additional session-scoped enumeration is
+needed. Do not claim completeness merely from the unresolved list.
+
+TEST / PROOF DESIGN FOR D4S IMPLEMENTATION
+Direct isolation proof on disposable real PostgreSQL schema: B begins
+snapshot on backend PID B, reads version X through the callback. A on
+distinct backend PID A commits X+1 after B's first read using explicit
+barriers/query hooks. B reads again and must see X. End B; C opens a new
+snapshot and sees X+1. Assert PID separation, exact query ordering, and
+snapshot rollback on an injected callback error. Verify READ ONLY rejects a
+write and SELECT FOR UPDATE. Verify ordinary transaction still reports READ
+COMMITTED. Use bounded barriers, not sleep-only scheduling.
+
+Full D3N race proof: A begins D3N writer transaction and pauses after all
+terminal writes but before COMMIT. B begins snapshot on a distinct backend,
+reads an early authority component (thus fixes its snapshot), and pauses.
+A commits; B resumes all remaining authority reads and must see the complete
+pre-commit tuple: no terminal receipt, unresolved pending, pre-terminal
+recovery/broker state. B ends. C begins a fresh snapshot and must see the
+complete post-commit terminal tuple: receipt, resolved pending, V2 recovery,
+FAILED_NOT_SUBMITTED broker row, unchanged checkpoint, coherent outcomes and
+capability. Assert each component and distinct backend IDs. Query hooks and
+deferred barriers control every phase. No sleep-only proof. Since this audit
+does not implement D4 boot, the full tuple test is a later D4S/D4 gate.
+
+Writer regression gate after implementation: static/store/typecheck gates;
+D3N real PostgreSQL 32/32, historical D3 17/17, D2C 8/8 if shared harness or
+configuration changes, B1F 15/15 if RealPostgresExecutor changes. Test
+ordinary writer isolation explicitly, timeout/search_path/rollback behavior,
+and lost-COMMIT simulation remaining confined to writer transactions. Do not
+infer these suites passed from this source-only audit; none was run here.
+
+MIGRATION AND ROLLOUT
+This is executor/loader infrastructure over existing tables and D2C topology.
+No schema change is needed; no migration 0007. If later implementation
+discovers a required schema change, hard stop and redesign before D4.
+1. Implement the additive D4S snapshot executor contract and real executor
+   path; keep writer transaction(work) READ COMMITTED.
+2. Prove real PostgreSQL isolation/read-only/pinning and the controlled
+   pre/post-commit snapshot behavior.
+3. Run writer and static regressions above.
+4. Commit D4S separately after review.
+5. Resume D4 query-only loaders, boot composition, classifier, terminal
+   hydration, and proof-missing rejection with their own tests.
+6. Run D5 exhaustive race matrix.
+7. Perform C2B3 runtime cutover only after those gates.
+
+This audit changes no production source, test, schema, classifier, loader,
+dispatcher, READY gate, or reconciliation policy. Commit/push = none.

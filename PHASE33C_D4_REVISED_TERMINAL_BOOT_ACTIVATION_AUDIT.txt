@@ -1,0 +1,70 @@
+Task045 / Phase33C D4 revised terminal boot activation audit
+
+VERDICT = HARD STOP
+REAL_POSTGRES_VERIFIED_FOR_D4 = NO
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+
+Baseline
+HEAD = a817a121b3db9b0c2f660043d094706532c34204
+origin/main = a817a121b3db9b0c2f660043d094706532c34204
+Initial worktree = clean
+
+Previous D4 hard stop and revised design
+The previous D4 audit correctly found that a bare FAILED_NOT_SUBMITTED broker row
+and PENDING effect cannot reconstruct TerminalNonSubmissionProofV1. The revised
+design resolves that semantic question: DB-only boot must reject that historical
+proof-missing state, never fabricate a proof or emit
+TERMINAL_NON_SUBMISSION_REQUIRED. A complete D3/D3N terminal tuple could instead
+return TERMINAL_NON_SUBMISSION after coherent validation.
+
+Blocking invariant: coherent boot snapshot is unavailable through the current
+PostgresExecutor abstraction.
+packages/orchestration-state-store-postgres/src/postgres.ts exposes only
+transaction(work), with no isolation-level contract or option. Its real
+PostgreSQL test implementation in tests/integration/b1f-postgres-helper.ts begins
+a pinned transaction, explicitly sets READ COMMITTED, and executes SELECT
+pg_backend_pid() before invoking work. Consequently a D4 callback cannot safely
+set REPEATABLE READ before the transaction's first query. Several authority
+components require separate reads. READ COMMITTED can see a D3/D3N commit
+between those reads and produce a mixed pre/post-commit tuple. No existing
+revision double-check/reload algorithm establishes an equivalent snapshot.
+Task045 section 16 explicitly requires HARD STOP if the current transaction
+abstraction cannot set REPEATABLE READ safely. A new executor isolation contract
+and its implementation must be designed and reviewed before boot activation.
+
+Architecture discovered
+packages/sandbox-orchestration-recovery/src/classify.ts is the pure C1
+classifier. packages/sandbox-orchestration-recovery/src/types.ts defines
+RecoveryBootResult, including future terminal variants. No production boot
+loader or runtime dispatcher calls the classifier. PostgreSQL stores supply
+individual recovery, lease, checkpoint, pending, outcome, broker idempotency,
+and immutable receipt reads, including transaction-bound functions. D3 and D3N
+commit terminal facts atomically in one pinned write transaction. The old
+execution runtime has not been cut over to D3N.
+
+Requested D4 behavior remains unimplemented due to the snapshot hard stop
+- Exact closed terminal tuple classification and stopped terminal hydration.
+- Proof-missing legacy typed rejection; existing classifier still reports
+  UNSUPPORTED_TERMINAL_NON_SUBMISSION for FAILED_NOT_SUBMITTED.
+- DB-only REQUIRED reachability remains NO; the public union member remains
+  representable and no proof is synthesized.
+- Terminal corruption matrix, READY exclusion, and result/dispatch gates.
+- D2C capability gate for terminal boot.
+- Deterministic D3/D3N uncommitted versus boot race and repeatability proof.
+
+Files changed in this task
+- PHASE33C_D4_REVISED_TERMINAL_BOOT_ACTIVATION_AUDIT.txt only.
+The previous PHASE33C_D4_TERMINAL_BOOT_ACTIVATION_AUDIT.txt remains unchanged.
+No classifier, loader, transaction abstraction, schema, D3/D3N service, or
+execution runtime was modified. No migration 0007 was added.
+
+Validation
+Baseline git checks passed. No static, focused, or real PostgreSQL D4 suite was
+run because D4 boot implementation was stopped before editing production code.
+D3/D3N and B1F/D2C suites were not rerun; their shared loaders and harness were
+unchanged. HBA bridge was not used; no HBA restoration was needed. No credentials
+or temporary auth settings were written. No commit or push was made.
+
+C2B3 runtime cutover remains outside D4. This audit makes no claim that the old
+execution runtime is safe for READY or live trading.
