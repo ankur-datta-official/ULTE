@@ -31,4 +31,5 @@ __pycache__/
 *.py[cod]
 .venv/
 .ipynb_checkpoints/
+research/data/
 

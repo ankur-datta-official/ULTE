@@ -1,0 +1,53 @@
+Task054 real alpha baseline audit
+Base revision: 3dcc6184435e01b0d55d2862c152265fa7747682
+VERDICT = DATA_ACQUISITION_BLOCKER
+VERIFIED_REAL_DATASET = NO
+DATA_QUALITY = UNMEASURED (no real file supplied)
+NO_LOOKAHEAD = UNMEASURED (no shared-engine historical export)
+ULTE_SHARED_ENGINE_REPLAY = NO
+COST_MODEL = UNCONFIGURED
+CHRONOLOGICAL_SPLIT = POLICY_READY; no real boundaries frozen
+REAL_ALPHA_BASELINE = NO
+ALPHA_BASELINE_CERTIFIED = NO
+READY_ALLOWED = NO
+PRODUCTION_READY = NO
+
+Research target: The source and PROJECT_SPEC.md specify no primary venue,
+market type, instrument, setup timeframe, higher timeframe, or official feed.
+The user directed this task to remain source-agnostic. Those fields are
+UNSPECIFIED. Required base fields are UTC candle open and close/availability
+times, open/high/low/close/volume; derivatives may additionally need funding,
+mark/index and open interest depending on the chosen strategy/feed.
+
+Data pipeline: research/validation/import_ohlcv.py imports a caller-supplied
+official-source CSV without gap filling, verifies UTC boundary alignment,
+chronology, uniqueness, contiguous intervals, OHLC/volume and retrieval-time
+boundaries, and writes local ignored candles plus a source/normalized SHA-256
+manifest with 60/20/20 chronological cutoffs. Source identity is declared,
+not authenticated. No market bytes, retrieval date, period, row count, or
+source checksum exist yet. Exact input schema and command are in the README.
+
+Current strategy: unchanged shared ULTE analysis and decision engines; three
+setup families and 3.00 net RR minimum. Runtime analysis thresholds, cost bps,
+portfolio limits, equity, position state, and sizing are caller supplied, with
+no default production strategy config. Current confidence score: NO.
+
+Cost assumptions: maker/taker fees, spread, slippage, and funding are
+UNCONFIGURED pending venue and market selection. Existing Task053 harness
+uses next-open adverse entry, stop-first for ambiguous bars, worse stop gaps,
+no favorable target gap improvement, explicit fee/spread/slippage/funding bps.
+
+Headline, regime, setup, entry and selectivity results: UNMEASURED. There are
+zero real paired analysis/decision observations and zero real closed trades.
+No best/worst regime or setup, primary failure mode, or Task055 optimization
+priority can be inferred. No strategy parameters were changed.
+
+Verification: 12 focused Python research tests PASS under WSL Python 3.14.4;
+root TypeScript build PASS; git diff --check PASS. No Phase33C or PostgreSQL
+suite was run. Research contains no TypeScript project to typecheck.
+
+DATA_ACQUISITION_BLOCKER = Supply the primary venue/market/instrument and
+timeframe pair plus the chosen official historical OHLCV file (schema in
+research/validation/README.md), source URL/retrieval date, venue cost schedule,
+and historical account/risk configuration. Then replay through the shared
+ULTE engines and run Task053 validation before any certification.
