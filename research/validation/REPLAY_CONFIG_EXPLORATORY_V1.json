@@ -1,0 +1,53 @@
+{
+  "status": "EXPLORATORY_TEST_SETTINGS_NO_PRODUCTION_COMPOSITION",
+  "analysis": {
+    "profileVersion": "BTCUSDT_EXPLORATORY_TEST_CONFIG_V1",
+    "timeframes": [
+      { "timeframe": "1h", "historyLimit": 5 },
+      { "timeframe": "4h", "historyLimit": 3 },
+      { "timeframe": "1d", "historyLimit": 3 }
+    ],
+    "roles": { "regimeTimeframe": "4h", "structureTimeframe": "1h", "setupTimeframe": "1h" },
+    "regime": {
+      "trendLookback": 2,
+      "baselineVolatilityBars": 1,
+      "recentVolatilityBars": 1,
+      "trendEfficiencyMinBps": 7000,
+      "trendConsistencyMinBps": 7000,
+      "rangeEfficiencyMaxBps": 3000,
+      "rangeConsistencyMaxBps": 3000,
+      "compressionRatioMaxBps": 8000,
+      "expansionRatioMinBps": 12000
+    },
+    "structure": { "lookbackBars": 5, "pivotLeftBars": 1, "pivotRightBars": 1 },
+    "setup": {
+      "continuationAllowedRegimes": ["TREND_UP", "TREND_DOWN"],
+      "breakoutAllowedRegimes": ["TREND_UP", "TREND_DOWN", "RANGE"],
+      "reversalAllowedRegimes": ["RANGE", "TRANSITION"]
+    },
+    "cycleDeduplicationWindowSize": 16
+  },
+  "decision": { "recentDecisionWindowSize": 16 },
+  "costs": { "entryFeeBps": 5, "exitFeeBps": 5, "entrySlippageBps": 1, "exitSlippageBps": 1, "spreadBps": 1 },
+  "risk": {
+    "minimumNetRewardRiskBps": 30000,
+    "initialEquity": "10000",
+    "riskFraction": "0.01",
+    "portfolioRiskConfig": {
+      "maxRiskPerTradeBps": 100,
+      "maxTotalOpenRiskBps": 300,
+      "maxConcurrentPositions": 3,
+      "maxDailyLossBps": 500,
+      "riskGroupLimits": []
+    },
+    "instrumentSizingSpec": {
+      "valuationModel": "LINEAR_PRICE_PNL",
+      "pnlCurrency": "USDT",
+      "quantityUnit": "BTC",
+      "quantityStep": "0.001",
+      "minimumQuantity": "0.001",
+      "maximumQuantity": "1000",
+      "pnlValuePerPriceUnitPerQuantity": "1"
+    }
+  }
+}

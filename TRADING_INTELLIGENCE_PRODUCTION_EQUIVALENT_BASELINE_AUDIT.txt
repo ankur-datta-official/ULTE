@@ -1,0 +1,194 @@
+TASK056 RESEARCH INTEGRITY AUDIT
+================================
+
+VERDICT = CORRECTED_EXPLORATORY_BASELINE; PRODUCTION_EQUIVALENCE_NOT_ESTABLISHED
+ALPHA_BASELINE_CERTIFIED = NO
+READY_ALLOWED = NO
+PRODUCTION_READY = NO
+
+Scope and previous baseline
+---------------------------
+The Task055 audit is retained as historical exploratory evidence. Its four-trade
+result was not an alpha verdict: analysis/decision thresholds came from tests,
+the account was static, separately published exchange timeframes conflicted,
+and the old final OOS was inspected during diagnostic selection. Task056 did
+not optimize strategy parameters or download another dataset.
+
+Verified dataset and canonical timeframe policy
+-----------------------------------------------
+Binance USD-M perpetual BTCUSDT, 2020-01-01T00:00:00Z through
+2026-10-01T00:00:00Z exclusive. 405 official monthly ZIP archives (81 each
+for 15m, 1h, 4h, 1d and funding) matched adjacent official SHA-256 checksum
+files. The imported 15m source has 236,640 chronological, contiguous,
+aligned, closed bars. Fifteen official bars have zero recorded volume;
+zero is retained and does not invalidate OHLC. No gap or unavailable bar was
+filled. The 15m archive is the declared canonical price source. Complete
+closed 1h (59,160), 4h (14,790), and 1d (2,465) bars use UTC boundaries:
+first child open, maximum child high, minimum child low, last child close,
+and decimal-safe sum of child volume. Derived bars become available only at
+their close. All three derived series share the same 15m price path. Official
+separate 1h/4h/1d archives remain checksum-verified QA sources.
+
+OFFICIAL_SOURCE_CONFLICTS = 4 pairwise OHLC comparisons in the original
+official archives: 15m->1h at 2023-11-10 15:00 and 16:00 UTC; official
+1h->4h at 2023-11-10 12:00 and 2024-10-28 20:00 UTC. Official 1h->1d and
+4h->1d OHLC compare without conflict.
+The exact mismatched pairwise OHLC fields (child aggregate vs published
+parent, USDT) are:
+* 15m->1h, 2023-11-10 15:00: high 37120 vs 37189.80;
+  low 37030.30 vs 36945.00; close 37118.40 vs 37092.60.
+* 15m->1h, 2023-11-10 16:00: open 37118.40 vs 37092.60;
+  low 37118.40 vs 37092.50.
+* official 1h->4h, 2023-11-10 12:00: close 37092.60 vs 37118.40.
+* official 1h->4h, 2024-10-28 20:00: open 69566.10 vs 69650.00.
+
+Direct canonical-vs-official bar
+comparison has two 1h OHLC conflicts and two 4h OHLC conflicts, no 1d
+OHLC conflict, and additional volume-only differences: four differing bars
+each at 1h, 4h and 1d when volume is included. All field-level values and
+UTC open times are recorded in RESEARCH_TARGET_V1.json. The underlying reason
+Binance published conflicting aggregates is unknown; this policy does not
+assert which archive is exchange-correct. Its research purpose is one
+internally consistent, verified input path. The independent 15m execution
+path reconciles to every derived 1h bar.
+
+Production configuration limitation
+-----------------------------------
+PRODUCTION_CONFIG_REPLAY = NO. The repository's apps/ directories have only
+placeholders. Shared analysis/decision engines require caller-supplied config
+and export no strategy default. PROJECT_SPEC.md leaves trading strategy
+thresholds unspecified. The user confirmed that no production config exists.
+There is therefore no existing application composition from which to
+establish a canonical production configuration. Inventing one from
+historical outcomes would violate this task. No trading rule was changed.
+
+REPLAY_CONFIG_EXPLORATORY_V1.json is the single immutable research snapshot.
+Its test-derived analysis values are: 1h/4h/1d history limits 5/3/3; regime
+4h, structure/setup 1h; regime trend lookback 2, baseline/recent volatility
+bars 1/1; trend efficiency/consistency 7000/7000 bps; range efficiency/
+consistency 3000/3000 bps; compression/expansion ratio 8000/12000 bps;
+structure lookback 5 with 1/1 pivot sides; setup regime allowlists and
+deduplication 16 as spelled out in the snapshot. The shared
+RealtimeAnalysisEngine and RealtimeDecisionEngine consume it. Minimum net
+signal reward/risk remains the mandatory 30000 bps (3.00R). Portfolio
+research settings are 100 bps max per trade, 300 bps max open, three
+concurrent positions, and 500 bps daily loss, with no risk groups. BTC
+sizing step/minimum is 0.001 BTC. Base fee is 5 bps each side, slippage 1
+bps each side, spread 1 bps each side. These are research assumptions, not
+production settings or a claim of calibrated venue execution.
+
+Causal account and signal/portfolio separation
+----------------------------------------------
+CAUSAL_ACCOUNT_CONTEXT = YES for this research replay. Initial equity is
+10,000 USDT once. Requested risk is 1% of then-current account equity.
+At each closed 1h boundary, only earlier complete 15m bars and funding
+events advance the account. Positions enter at the next 15m open. Open risk
+comes from actual sized position risk; daily start equity resets at the UTC
+day boundary after known events. Funding changes account cash only when a
+held position spans an observed settlement. Closed price/fee PnL changes
+equity only after the observed exit. Money arithmetic uses the shared exact
+decimal package. Future PnL is never supplied to a decision. Account
+snapshots at actionable boundaries are exported; an independent Python
+fill/PnL model reconciles all four fills, quantities, equity steps, and
+final equity. No candidate was blocked by the portfolio or sizing gates.
+Signal-level and executable/portfolio results are consequently identical
+for this dataset. There were no overlapping positions or unresolved trades.
+This does not establish that the modeled account is a live account history.
+
+Decision funnel, corrected replay
+---------------------------------
+DECISION_FUNNEL_EXPLAINED = YES for all published gates.
+TOTAL_CYCLES = 59,160; MARKET_DATA_VALID = 59,160.
+ANALYSIS_CANDIDATE_CREATED = 2,033 cycles (2,059 candidate instances).
+SETUP_DETECTED = 2,059 candidate instances: BREAKOUT_RETEST 1,251 armed
++ 194 confirmed; TREND_PULLBACK_CONTINUATION 600 armed + 11 confirmed;
+LIQUIDITY_SWEEP_REVERSAL 3 armed + 0 confirmed.
+CONFIRMED_CANDIDATES = 205.
+NO_DECISION = 58,955: 11 insufficient history, 57,116 no setup, and
+1,828 with armed but no actionable confirmed candidate.
+REJECTED_BY_STRUCTURAL_RISK = 201: 150 NO_STRUCTURAL_TARGET,
+46 NET_RR_BELOW_MINIMUM, 5 COSTS_CONSUME_REWARD.
+REJECTED_BY_RISK_CONTEXT = 0; REJECTED_BY_ACCOUNT_CONTEXT = 0.
+TRADE_INTENT_CREATED = 4; EXECUTABLE_TRADE = 4;
+FINAL_SIMULATED_TRADE = 4.
+
+Regime family allowlists, structure event/level evidence, liquidity evidence,
+volatility classification and MTF context operate inside shared evaluators.
+They do not emit separate rejection counters. Their individual rejection
+totals are therefore NOT_PUBLISHED rather than invented. All 59,149 cycles
+past warm-up had READY regime, READY structure and READY setup evaluation;
+this does not mean each had a candidate. The published structural risk gate
+is the main measurable attrition: 205 confirmed to four qualified signals.
+
+Historical validation and holdout
+---------------------------------
+WALK_FORWARD_PROTOCOL_LOCKED = YES. WALK_FORWARD_PROTOCOL_V1.md was written
+before corrected performance was examined. It freezes expanding annual
+train, validation and next-forward windows with forward evaluation in 2023,
+2024, 2025, and 2026-01-01 through 2026-10-01. Untuned forward-window trade
+counts are 0, 2, 0, 1 respectively; no fold supports an alpha claim.
+PREVIOUS_OOS_STATUS = BURNED_FOR_RESEARCH_DIAGNOSTICS for
+2025-07-01 through 2026-09-30 UTC, inclusive by date.
+TRUE_FORWARD_HOLDOUT_START = 2026-10-01T00:00:00Z.
+FINAL_PRISTINE_OOS_AVAILABLE = NO. Future data from this instant must be
+reserved for shadow/forward certification, not historical optimization.
+
+Corrected exploratory metrics
+-----------------------------
+SIGNAL_CANDIDATES = 2,059 (205 confirmed).
+SIGNAL_ELIGIBLE = 4; RISK_ACCOUNT_BLOCKED = 0; EXECUTED_TRADES = 4.
+SAMPLE_ADEQUACY = VERY_INSUFFICIENT (<30). All setup, regime and direction
+buckets are insufficient for comparative claims.
+WIN_RATE = 0/4 = 0%. Wilson 95% descriptive interval: 0% to 48.9891%.
+EXPECTANCY_R = -1.071038. Seeded 2,000-draw percentile bootstrap 95%
+interval conditional on these four observed trades: -1.090220 to -1.051855R.
+This bootstrap cannot account for unobserved market outcomes and does not
+establish negative population expectancy.
+PROFIT_FACTOR = 0.000000; MAX_DRAWDOWN_R = 4.284151;
+AVG_WIN_R = unavailable (zero wins); AVG_LOSS_R = -1.071038;
+MEDIAN_R = -1.068502; TOTAL_NET_R = -4.284151;
+MAX_CONSECUTIVE_LOSSES = 4; 1R/2R/3R/4R+ target-hit counts = 0/0/0/0;
+4R_PLUS_RATE = 0%; mean MFE = 0R, mean MAE = 0.645060R;
+average holding = one 15m execution-detail bar;
+trade frequency = four trades over 2,465 days (~0.049/month).
+Long: 1 trade, -1.100046R; short: 3 trades, mean -1.061368R;
+both VERY_INSUFFICIENT. All four are BREAKOUT_RETEST; one TREND_UP and
+three TREND_DOWN, all NORMAL volatility. No best/worst subgroup is selected.
+Worse-cost sensitivity adds 1 bps each to spread and entry/exit slippage:
+-1.131967R expectancy on the same four signals. Four modeled trades span
+zero funding events; actual archived funding has no effect on their R.
+Account final equity is 9,606.213898104363 USDT (from 10,000 USDT).
+
+Entry diagnostics and decision
+------------------------------
+All four stopped in their first 15m bar (15 minutes from entry). Their
+entry-to-invalidation distances were 31.487934, 204.336540, 149.667860,
+and 168.887820 USDT. Initial adverse excursion lower bounds were
+0.499268, 0.764993, 0.598523, and 0.717456R. No positive MFE was proven
+before the stop, so time-to-MFE is unavailable. No signal-qualified candidate
+was account-filtered; such entry diagnostics have no applicable cases.
+These four losses suggest an entry/stop interaction worth investigating,
+but cannot distinguish signal selection, entry timing, invalidation or exit
+logic. PRIMARY_FAILURE_MODE = SPARSE_STRUCTURAL_RISK_ELIGIBILITY;
+EXECUTED_TRADE_CAUSE = INSUFFICIENT_EVIDENCE. The 150 missing structural
+targets are the largest observed rejection group.
+
+ALPHA_OPTIMIZATION_CAN_START = NO. Task057 must not tune parameters: the
+production strategy configuration is absent and only four executed trades
+exist. NEXT_REQUIRED_ACTION = define and review a canonical production
+strategy configuration without historical tuning, then investigate
+opportunity generation/structural target coverage using the published funnel.
+An expanded instrument universe or supported alternate base timeframe may
+be considered only as a preregistered new research target. No confidence
+score is added in Task056.
+
+Research limitations
+--------------------
+This is a candle-path fill model. Intra-15m stop/target ordering is unknown,
+so a bar touching both stops first. Stops gap to the worse of bar open or
+barrier; targets fill at barrier; entry/exit costs are fixed assumptions.
+Funding uses entry notional because settlement mark prices were not in the
+downloaded funding archive. Order-book queue, market impact and partial
+fills are not modeled. The research config is test-derived and the prior
+OOS is burned. No production equivalence, alpha certification, live-trading
+readiness or pristine forward evidence is asserted.

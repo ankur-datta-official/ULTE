@@ -1,0 +1,135 @@
+Task055 BTCUSDT official-data exploratory baseline audit
+Base ULTE revision: 7fcbf5e11f814b6fa3de38a6243803b9abae2128
+VERDICT = EXPLORATORY_ONLY; NOT_CERTIFIED
+VERIFIED_REAL_DATASET = YES (official Binance ZIPs and adjacent SHA-256 sidecars)
+ALPHA_BASELINE_CERTIFIED = NO
+SHARED_ULTE_REPLAY = PASS (59,160 paired analysis/decision cycles)
+NO_LOOKAHEAD = PASS for exported frames and decision boundaries
+FINAL_OOS_LOCKED = NO (test-setting selection followed an initial full-period diagnostic replay)
+READY_ALLOWED = NO
+PRODUCTION_READY = NO
+
+Research target and provenance
+Manifest: research/validation/RESEARCH_TARGET_V1.json
+Manifest SHA-256: c0cec69f7f558c534d794741f75390b55f8e377c1b9c6a0163cd6ab9007e3f11
+Venue/market/instrument: Binance USD-M perpetual BTCUSDT.
+Official source: https://data.binance.vision/data/futures/um/monthly/
+Source documentation: https://github.com/binance/binance-public-data
+Retrieved: 2026-10-13T19:22:27.298210+00:00.
+All 405 monthly ZIPs (81 months x 15m, 1h, 4h, 1d, fundingRate) matched
+their adjacent official .CHECKSUM files. Per-file source URLs, byte counts and
+SHA-256 values are in the versioned manifest. Raw ZIPs, normalized candles,
+paired replay and baseline results are gitignored under research/data/.
+Full period: 2020-01-01T00:00:00Z through 2026-09-30T23:59:59Z.
+TRAIN: 2020-01-01 through 2023-12-31. VALIDATION: 2024-01-01 through
+2025-06-30. FINAL OOS: 2025-07-01 through 2026-09-30. These are calendar
+boundaries, not the generic importer's 60/20/20 suggestions.
+Rows: 15m 236,640; 1h 59,160; 4h 14,790; 1d 2,465; funding 7,395.
+Normalized SHA-256: 15m fd7024414f19ccd2ad11044e02ff980717bb9f1826731c68dd9d97990cd54d75;
+1h 399d1717d36c4eee145ff275bc729ddcc425785cfb398b15bd0b555e69e50b6b;
+4h 2b2415d96c4d8dbec872f86f4cd8964315faa3950ae078296d90d52d6a086ffb;
+1d 1cd6c4120daaa19f211ecb5866f22eeb4e3718ae28232d79b35b31b699b3632a;
+funding e10d9984f252442e096d9c8df59c3456b715f198bdb9e22e85eb3c31c0dd306d.
+Replay input SHA-256: 1d9d50b67ee99ccb883e0ddf9a3a91e853a84182d1d12360d96b9fd700d56c23.
+Baseline result SHA-256 at review: a91d1ba65ffda3762d5482af9c4264999d3b2e2860d0a413225e40a8f0180268.
+
+Data quality and replay
+The existing OHLCV importer accepted all four complete, strictly ordered,
+unique, UTC-aligned kline series with valid OHLCV and zero missing intervals.
+Official inclusive close timestamps equal open+duration-1ms; normalized
+exclusive close/availability is open+duration. No candle is forward filled.
+Funding has 7,395 ordered 8-hour settlements and zero interval gaps.
+However, Binance's 15m OHLC does not aggregate to its own 1h OHLC at
+2023-11-10T15:00:00Z and 2023-11-10T16:00:00Z. The 1h bars also disagree
+with the 4h aggregate at 2023-11-10T12:00:00Z and 2024-10-28T20:00:00Z.
+1h-to-1d and 4h-to-1d aggregates have zero mismatches. All four pairwise
+exceptions are recorded in the manifest; the two 15m/1h exceptions are also
+in the baseline result. None intersects a simulated trade; the fill harness
+fails closed if an open trade intersects either 15m/1h mismatch hour. This is
+an unresolved source-quality exception, not repaired or silently substituted.
+The replay forwards only finalized 1h/4h/1d candles at their close boundaries
+to the same shared ULTE analysis and decision engines used by application
+logic. The 15m series is used only for fill ordering and MFE/MAE. A complete
+59,160-cycle verification found no future or open frame candle. The generic
+baseline harness separately validated paired cycle identities and boundaries.
+
+Research configuration and costs
+No production strategy thresholds or historical account snapshots exist in
+the repository. At user direction, this exploratory run used the analysis
+engine's documented test thresholds, the structure engine's 5-bar test
+lookback with 1/1 pivots, and the setup engine's test regime allowlists.
+Regime role was 4h, structure/setup role 1h; 1d was observed in the frame but
+is not consumed by current strategy logic. A synthetic static 10,000 USDT
+account, 100 USDT requested risk and 0.001 BTC quantity step supplied the
+decision context. These assumptions cannot certify historical eligibility.
+The ULTE 3.00 net projected reward/risk floor was unchanged. The base risk
+cost assumption is 7 bps at entry and each exit. Fill costs are 5 bps taker
+fee at entry and exit (Binance regular-user example:
+https://www.binance.com/en/support/faq/detail/360033544231), plus fixed
+1 bp spread and 1 bp adverse slippage on each side. Historical spread and
+slippage are not reconstructed. The worse case keeps fees at 5 bps but uses
+2 bps spread and 2 bps slippage on each side, with unchanged signals.
+Next-open entry, worse stop gaps, no favorable target gap improvement and
+stop-first for unknown ordering within a 15m bar are deterministic. Actual
+funding rates are applied on entry notional when a held interval includes a
+settlement; settlement mark prices are unavailable, so entry notional is an
+approximation. None of these four short-lived trades crosses a settlement.
+
+Exploratory result (net R; every bucket below has INSUFFICIENT_SAMPLE)
+                 trades  win rate  expectancy  profit factor  max DD
+TRAIN                 1     0.000   -1.100046       0.000000  1.100046
+VALIDATION            2     0.000   -1.063748       0.000000  2.127496
+FINAL OOS             1     0.000   -1.056609       0.000000  1.056609
+TOTAL                 4     0.000   -1.071038       0.000000  4.284151
+Total net R -4.284151; average win R unavailable; average loss R -1.071038;
+median R -1.068502; max consecutive losses 4. Realized target-hit rates at
+1R/2R/3R/4R+ are all 0/4. Average MFE 0.000000 R; average MAE 0.645060 R.
+Trade frequency 0.048682 per 30 days. All four trades stopped in the first
+15m bar; realized funding events 0. Worse-cost expectancy -1.131967 R,
+total -4.527869 R and max drawdown 4.527869 R.
+The harness observed 58,955 no-decision and 201 rejected cycles; rejection
+stage was structural risk in all 201. No-decision reasons: NO_SETUP 57,114,
+NO_ACTIONABLE_CANDIDATE 1,830, INSUFFICIENT_HISTORY 11.
+
+Observed breakdown (sample counts prohibit statistical ranking)
+Regime TREND_DOWN: n=3, win 0%, expectancy -1.061368 R, MFE 0.000000, MAE 0.693657.
+Regime TREND_UP: n=1, win 0%, expectancy -1.100046 R, MFE 0.000000, MAE 0.499268.
+Other regimes: n=0 accepted trades. Observed best is TREND_DOWN and observed
+worst TREND_UP, but neither ranking is defensible with n=3 and n=1.
+Setup BREAKOUT_RETEST: n=4, win 0%, expectancy -1.071038 R,
+MFE 0.000000, MAE 0.645060; other setup families n=0.
+Best/worst setup: UNDETERMINED; no cross-setup comparison exists.
+Direction LONG: n=1, win 0%, expectancy -1.100046 R,
+MFE 0.000000, MAE 0.499268.
+Direction SHORT: n=3, win 0%, expectancy -1.061368 R,
+MFE 0.000000, MAE 0.693657.
+PRIMARY_FAILURE_MODE = INSUFFICIENT_EVIDENCE. The four immediate stop-outs and
+zero pre-exit MFE motivate an entry-path investigation, but do not distinguish
+SIGNAL_SELECTION, ENTRY_TIMING, REGIME_SELECTION or INVALIDATION reliably.
+
+Task056 optimization priorities
+TASK056_TOP_3 = NONE. Four trades, a synthetic account context, an unresolved
+cross-timeframe source discrepancy and OOS exposure do not support a trading
+rule change. Prerequisites before proposing at most three rule changes:
+1. Freeze an actual runtime strategy/risk/account configuration independently
+   of OOS; expected impact is validity, overfitting risk low, implementation
+   risk medium. Current evidence: no production config or account history.
+2. Resolve or exclude the source-mismatch periods by an explicit versioned
+   policy; expected impact is data validity, overfitting risk low,
+   implementation risk low. Current evidence: four cross-timeframe pairwise
+   conflicts in three periods from official archives.
+3. Collect enough independently locked forward/OOS trade observations to
+   discriminate entry timing from selection and invalidation; expected impact
+   on diagnosis high but on expectancy unknown, overfitting risk high if used
+   for tuning, implementation risk medium. Current evidence: only four trades.
+No strategy parameter optimization or Phase33C change is claimed.
+
+Verification and disposition
+Focused Python importer/alpha regression tests: 13 PASS.
+Affected analysis/decision tests: 70 PASS. Root typecheck PASS.
+Full real-data replay verifier: 59,160 paired cycles PASS.
+Git diff --check: PASS. Phase33C suites were not run.
+Certification is blocked by nonproduction test settings, synthetic historical
+account/risk context, n=4, four cross-timeframe OHLC mismatches, and OOS exposure during
+exploratory configuration selection. No commit or push is authorized by the
+task's conditional instruction because the baseline is not certified.
