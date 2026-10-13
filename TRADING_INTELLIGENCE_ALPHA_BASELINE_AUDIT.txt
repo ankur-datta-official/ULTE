@@ -1,0 +1,92 @@
+Task053 trading-intelligence alpha baseline audit
+Revision inspected: 70099b0427fbcd7d54dd1f5a9f34f9499f90a57c
+VERDICT = DATASET_BLOCKER; alpha baseline is not certified.
+ALPHA_BASELINE_CERTIFIED = NO
+READY_ALLOWED = NO
+PRODUCTION_READY = NO
+
+Current pipeline (source audit)
+Normalized market trades -> shared market-data candle/MTF builder -> closed
+as-of analysis frame -> regime classifier and confirmed structure/liquidity ->
+three setup families -> deterministic decision gate -> structural risk/net RR
+qualification -> portfolio eligibility -> sizing -> ready trade intent or
+explicit no-decision/rejection. There is no score, confidence, probability,
+learned prediction, or broker fill at this stage. The intent is not a trade.
+The setup families are TREND_PULLBACK_CONTINUATION, BREAKOUT_RETEST, and
+LIQUIDITY_SWEEP_REVERSAL. Entry reference is the confirmation close;
+invalidation is the initiation sweep extreme or breakout retest extreme;
+primary target is the nearest active eligible structural liquidity level.
+The official qualification floor is 3.00 net RR under caller-supplied bps costs.
+
+Dataset / period / instrument
+No tracked historical market dataset or historical decision export exists in
+this repository. Dataset, period, instrument, trade count, win rate, net
+expectancy R, profit factor, drawdown R, average win/loss R, 4R+ rate, best/
+worst regime, and best/worst setup are UNMEASURED. No setup has demonstrated
+positive or negative edge. No regime or entry-quality attribution is possible.
+
+DATASET_BLOCKER = Supply a verified real chronological market dataset for one
+instrument with sufficient setup and context timeframe history, unambiguous
+UTC close availability, gap/quality provenance, and enough OOS observations;
+replay it through ULTE's shared candle, analysis, and decision engines with
+time-aligned historical risk/account context, then export paired cycle results
+and closed setup candles. Supply venue-appropriate fees, spread, slippage,
+funding (if futures), and source identity. Keep the final chronological TEST
+segment out of all tuning. The validation input contract is in
+research/validation/README.md.
+
+Data-integrity audit
+Existing replay rejects backward timestamps; the live/replay candle engine
+shares finalization, and analysis frames only include closed candles ending by
+as-of. Structure pivots are published after right-window confirmation;
+liquidity references and setup confirmations have as-of checks. Structural
+risk rejects future setup candles/structure and enforces exact-decimal 3R net
+qualification. These are source and regression-test findings, not proof of
+real-data correctness. No random train/test split or training fit exists.
+The new harness rejects duplicate/disordered/gapped/open candles, future MTF
+frame candles, mismatched cycle/intent provenance, and below-floor signals.
+It uses fixed chronological TRAIN/VALIDATION/TEST cutoffs and excludes trades
+that cross a cutoff from segment metrics. No source-correctness rule in the
+existing engines required a change in this task.
+
+Backtest assumptions and limitations
+The existing backtest engine replays events but has no fill or metrics engine.
+The new research harness enters at the next candle open with configured
+adverse spread/slippage, charges entry/exit fees and per-candle funding, uses
+stop-first for ambiguous bars, and degrades stop gaps to the candle open.
+Targets do not receive favorable gap improvement. It reports a trade ledger,
+R curve, headline and split metrics, regime/setup buckets, no-trade counts,
+frequency, exposure, and conservative MFE/MAE bounds. It does not model order
+book liquidity or partial fills. Its cost settings must be checked against
+the risk engine's cost assumptions before treating a 3R qualification as
+economically comparable. It cannot authenticate an exported JSON result or
+certify a data vendor; every run remains uncertified pending evidence review.
+
+Headline/breakdown findings
+BASELINE_METRICS = UNMEASURED (zero real trades supplied)
+REGIME_ANALYSIS = UNMEASURED; actual labels are TREND_UP, TREND_DOWN,
+RANGE, COMPRESSION, EXPANSION, TRANSITION.
+SETUP_ANALYSIS = UNMEASURED for all three existing families.
+CONFIDENCE_SCORE_USEFUL = INSUFFICIENT_DATA; no current score exists.
+ENTRY_QUALITY_ANALYSIS = UNMEASURED; no real post-entry paths exist.
+NO_TRADE_ANALYSIS = UNMEASURED; the harness counts rejected/no-decision cycles
+when a historical export is supplied.
+MULTI_TIMEFRAME_VALIDITY = source guards and tests pass; no real dataset audit.
+
+Top three current weaknesses (source evidence, not performance rankings)
+1. No trustworthy historical sample or point-in-time decision export.
+2. The replay package has no trade-fill/performance layer; realistic costs and
+   ambiguous-bar policy had not been measured in research.
+3. No score or probability output exists to rank or calibrate signals.
+
+Task054 priorities, conditional on real evidence
+1. Acquire and replay the required dataset; expected impact on knowledge HIGH,
+   confidence HIGH, implementation risk MEDIUM, overfitting risk LOW.
+2. Calibrate fee/spread/slippage/funding assumptions to the chosen market;
+   expected impact on validity HIGH, confidence HIGH, implementation risk LOW,
+   overfitting risk LOW.
+3. Inspect OOS regime/setup and entry-path buckets before choosing any
+   strategy rule or threshold change; expected impact UNKNOWN, confidence
+   LOW until data exists, implementation risk LOW, overfitting risk HIGH if
+   test results are used for tuning. No parameter optimization is authorized
+   by this audit.
