@@ -1,0 +1,238 @@
+TRADING INTELLIGENCE STRUCTURAL COVERAGE AUDIT — Task057
+Source revision: 5c8145813aba54f0c2878bf4337fae6dea935cf9
+Scope: BTCUSDT Binance USD-M historical research through 2026-09-30 UTC.
+Status: research diagnostic; no production strategy is approved.
+
+1. SOURCE CONTRACT AND CONFIGURATION INVENTORY
+
+Authority: PROJECT_SPEC.md; packages/realtime-analysis-engine/src/{types,config,engine}.ts;
+packages/regime-engine/src/{config,classifier}.ts;
+packages/structure-engine/src/{config,analyzer}.ts;
+packages/setup-engine/src/{config,evaluator}.ts;
+packages/risk-engine/src/{config,evaluator}.ts;
+packages/realtime-decision-engine/src/{types,config,engine}.ts;
+packages/portfolio-risk-engine/src/{config,evaluator}.ts; and
+packages/position-sizing-engine/src source. There is no production composition
+or authoritative production value set in apps/ or shared packages.
+
+SEMANTIC_FIXED
+- Only finalized, correctly ordered, gap-free candles through the decision as-of
+  enter analysis; the regime role selects the regime frame, and the shared setup
+  structure frame equals the setup frame. No future structure/confirmation level
+  is eligible. Source: realtime-analysis, structure, setup, and risk engines.
+- Regime formulas, structural strict pivot/tie/confirmation rules, event status
+  transitions, and setup initiation/confirmation sequence are implemented in
+  shared engines. No alternative calculation is selected by this candidate.
+- Entry reference is the confirmation candle close. Continuation/reversal stop
+  is the initiating sweep candle extreme; breakout/retest stop is the retest
+  candle extreme. Stop must be strictly on the loss side.
+- Target search uses active, confirmed setup-timeframe liquidity levels on the
+  profit side of entry. It orders nearest first, preserving source order for
+  equal prices. Resolved (BROKEN/SWEPT), future, opposite-side, and levels at
+  or behind entry are excluded. The first eligible target is primary.
+- The shared risk engine computes entry/target/stop costs with decimal-safe
+  arithmetic, qualifies net reward against net risk, then the decision engine
+  gates portfolio risk, sizing, and intent in that order. Exactly one confirmed
+  actionable setup candidate is required; multiple are rejected.
+- UTC millisecond timestamps and the existing source candle alignment are
+  retained. These are code semantics, not alpha parameters.
+
+SAFETY_POLICY
+- decisionContext.riskConfig.minimumNetRewardRiskBps: source/product minimum
+  30000 (3.00 net R); this candidate uses 30000. The engine permits a stricter
+  owner value but never less than 30000.
+- decisionContext.requestedRiskAmount and the policy used to derive it;
+  decisionContext.portfolioRiskConfig.maxRiskPerTradeBps,
+  maxTotalOpenRiskBps, maxConcurrentPositions, maxDailyLossBps, and
+  riskGroupLimits[{groupId,maxRiskBps}]; and proposedRiskGroupIds assignment.
+  The engine validates these, but defines no production values.
+
+ALPHA_TUNABLE (undefined production values; no optimization in this task)
+- analysis.timeframes[*].timeframe and historyLimit; analysis.roles regime,
+  structure, and setup timeframes. Source requires structure=setup; it does not
+  prescribe 1h/4h/1d or the lookback depth.
+- analysis.regime.{trendLookback,baselineVolatilityBars,recentVolatilityBars,
+  trendEfficiencyMinBps,trendConsistencyMinBps,rangeEfficiencyMaxBps,
+  rangeConsistencyMaxBps,compressionRatioMaxBps,expansionRatioMinBps}.
+- analysis.structure.{lookbackBars,pivotLeftBars,pivotRightBars}.
+- analysis.setup.{continuationAllowedRegimes,breakoutAllowedRegimes,
+  reversalAllowedRegimes}. These arrays select existing engine regime labels;
+  no new label or predicate was added.
+
+ENVIRONMENTAL
+- analysis.instrumentId and analysis.source; decisionContext.riskCosts
+  {entryCostBps,targetExitCostBps,stopExitCostBps}; venue/instrument sizing
+  fields {valuationModel,pnlCurrency,quantityUnit,quantityStep,
+  minimumQuantity,maximumQuantity,pnlValuePerPriceUnitPerQuantity}; and
+  point-in-time fxConversion when needed. Cost values must reflect real
+  execution conditions, not be reduced to rescue rejected candidates.
+- Point-in-time decisionContext.account.{asOf,baseCurrency,currentEquity,
+  dayStartEquity,openPositions}; each open position's risk amount and group
+  membership. These are runtime state, not frozen strategy constants.
+- analysis/decision profileVersion and deduplication/recent-decision window
+  sizes are operational identity/retention settings. They affect duplicate
+  behavior, not the structural price calculation; production choices remain
+  necessary for a runnable composition.
+
+The reviewed candidate is PRODUCTION_STRATEGY_CONFIG_V1_CANDIDATE.json. It
+contains source-defined fixed semantics, the mandated 30000-bps floor, and
+null production values for every undefined material group. Its status is
+OWNER_DECISION_REQUIRED, productionApproved=false, and
+executableAsEngineConfig=false. The exploratory replay's 1h/4h/1d roles,
+5/3/3 histories, structure 5/1/1, test regime thresholds/allowlists,
+7/7/7-bps all-in cost assumption, and account/risk/sizing values are
+research-only references, not production defaults. No parameter was selected
+from BTCUSDT outcomes.
+
+OWNER_DECISION_REQUIRED groups, exact fields: MARKET_AND_DATA_SOURCE,
+TIMEFRAME_ROLES, ANALYSIS_HISTORY_LIMITS, REGIME_PARAMETERS,
+STRUCTURE_PARAMETERS, SETUP_REGIME_ALLOWLISTS, EXECUTION_COST_POLICY,
+REQUESTED_RISK_AND_PORTFOLIO_LIMITS, INSTRUMENT_SIZING_AND_FX. The JSON
+contract lists every member field and the policy that must be supplied.
+
+2. DATA AND REPRODUCIBILITY
+
+Input is the existing ignored Task056 real-data replay (59,160 decision
+cycles; 2,059 setup candidates). The extractor re-invokes the exported shared
+qualifyStructuralRisk on all 205 confirmed candidates and requires exact JSON
+agreement with their recorded risk result. It checks the historical end and
+research profile. The path tool refuses candles beyond 2026-10-01T00:00:00Z
+and starts at the next 15m open after the confirmed 1h decision close.
+Historical data through 2026-09-30 is burned for research diagnostics;
+2026-10-01 onward remains untouched forward evidence. No new data was fetched.
+WALK_FORWARD_PROTOCOL_V1.md was not changed.
+
+Run, using the pre-existing ignored dataset and built shared packages:
+  node research/validation/extract_structural_coverage.mjs
+  python3 research/validation/structural_coverage_diagnostic.py
+
+The second command writes a full ignored JSON with source level exclusions and
+path bounds, and the tracked STRUCTURAL_COVERAGE_205_CANDIDATES.csv. That CSV
+has one row per confirmed candidate: UTC time, direction, regime, setup,
+entry, invalidation, target search, gross/net R, cost drag, rejection reason,
+and (where requested) post-decision MFE/MAE and censoring.
+
+3. CONFIRMED FUNNEL AND TARGET COVERAGE
+
+205 confirmed = 150 NO_STRUCTURAL_TARGET + 46 NET_RR_BELOW_MINIMUM +
+5 COSTS_CONSUME_REWARD + 4 QUALIFIED/EXECUTABLE. No account or portfolio
+block followed qualification in this replay. A target was available in
+55/205 (26.83%). No target in 150/205 (73.17%).
+
+Dimension/value                         Confirmed Target No target Below 3R Cost Qual
+Direction DOWN / regime TREND_DOWN            108     34        74       26    5    3
+Direction UP / regime TREND_UP                 97     21        76       20    0    1
+Setup BREAKOUT_RETEST                         194     55       139       46    5    4
+Setup TREND_PULLBACK_CONTINUATION              11      0        11        0    0    0
+Context timeframe 4h                         205     55       150       46    5    4
+Structure state UNDETERMINED                  204     54       150       45    5    4
+Structure state UP                              1      1         0        1    0    0
+Volatility state NORMAL                       205     55       150       46    5    4
+
+The regime/direction rows coincide in this sample; they are not independent
+groups. All 205 use a 4h context role, so this sample cannot compare context
+timeframes. Target coverage disappears completely for the 11 confirmed
+continuation setups; it is 55/194 for breakouts. The source's short 5-bar
+setup-frame structure window is exploratory, not production-authoritative.
+
+4. EXACT NO-TARGET MACHINE REASON
+
+SOLE_SAME_SIDE_LEVEL_BROKEN: 150/150. Each of these 150 structure snapshots
+contains exactly one direction-matching liquidity level (BUY_SIDE for UP,
+SELL_SIDE for DOWN); that level's status is BROKEN at as-of. There is
+no active same-side level to order or select. The extractor records every
+level's side, status, price, confirmation time, swing ID, and exclusion result
+and asserts that no eligible level was missed. Breakdown: 76 UP, 74 DOWN;
+139 BREAKOUT_RETEST, 11 TREND_PULLBACK_CONTINUATION. Other machine reasons
+(no level, wrong-side-only, future, at/behind entry, ordering mismatch) = 0.
+This reflects the existing source's exclusion of resolved levels, including
+the breakout reference consumed by the initiating break, plus the limited
+structure window. A broken level is not a valid untraded target under the
+current source contract. The diagnostic does not reclassify it as a target.
+
+5. POST-ENTRY COUNTERFACTUAL — RESEARCH ONLY
+
+For NO_STRUCTURAL_TARGET and NET_RR_BELOW_MINIMUM only, scan 15m OHLC from
+the next bar until the existing invalidation price is touched. If target and
+stop could both occur inside one bar, order is unknown: lower MFE uses only
+the open on that stop bar, upper MFE includes its full favorable wick. MAE is
+a lower bound to first stop. R divides by the existing entry-to-stop distance;
+it is gross price excursion before execution costs. The calculation assumes
+the reference entry is attainable at the next open, and does not model fills,
+latency, a tradable target, or an actual strategy return.
+
+                                  No target (n=150)  Below 3R (n=46)
+Stopped before data end                         149                46
+Right-censored at data end                        1                 0
+Conservative MFE <1R                            90                25
+                  1–<2R                         24                 5
+                  2–<3R                         15                 4
+                  3–<4R                          4                 3
+                  4R+                           17                 9
+Conservative MFE >=3R                         21/150             12/46
+Upper-bound MFE >=3R                          23/150             13/46
+
+No-target conservative 3R+ rate = 14.00% (21/150); among stopped cases it is
+20/149 = 13.42%. Below-3R conservative 3R+ rate = 26.09% (12/46). The single
+no-target right-censored case was 2024-02-12T08:00Z and spans 92,320 bars;
+its 152.63R observed MFE reflects an extremely long unresolved path, not a
+realistic trade opportunity. It is included transparently in the 21/150 and
+excluded from the stopped-case rate. Median MAE lower bound is 1R in both
+groups because nearly all paths reach the stop. Median conservative MFE is
+0.626R for no-target and 0.782R for below-3R. These excursions do not
+retroactively create a valid structural target or executable trade.
+
+6. BELOW-3R AND COST-CONSUMED DIAGNOSIS
+
+For the 46 with an eligible target, gross target R ranges 0.297–11.742;
+net R ranges 0.040–2.212; cost drag ranges 0.059–10.261R. Their respective
+medians are 1.929R, 0.630R, and 1.115R. The generator
+requires 3.00 net R, and the floor was unchanged. In 32/46, gross target R
+is already below 3, so target/entry/stop geometry fails even before costs.
+In 14/46, gross target R is at least 3 but net R falls below 3 under the
+documented 7-bps entry, 7-bps target, and 7-bps stop assumptions. The path
+diagnostic reaches 3R conservatively in 12/46; that does not change the
+source-approved target or net gate. The evidence supports mixed geometry and
+cost effects within this secondary rejection group. It cannot isolate late
+entry from wide invalidation without a new entry/stop counterfactual, which
+this task does not authorize.
+
+All 5 COSTS_CONSUME_REWARD are DOWN BREAKOUT_RETEST. Their gross target
+distance from entry is below the 14-bps combined entry and target exit cost:
+
+UTC decision          Target distance (bps)  Gross target R  Cost / gross reward
+2020-04-11 11:00                  10.88            0.241              1.286x
+2022-08-18 18:00                   5.97            0.090              2.342x
+2023-02-08 12:00                  12.83            1.198              1.091x
+2023-08-27 01:00                   4.66            0.356              3.006x
+2025-05-02 23:00                  10.35            0.737              1.352x
+
+All have valid stop-side geometry; their gross R is below 1.20 and net
+reward is negative. Their stop distances and exact cost drag are recorded
+per row. This is a tiny target gap consumed by the declared costs, not an
+arithmetic fault. No cost assumption was relaxed.
+
+7. TARGET FINDER CORRECTNESS AND DISPOSITION
+
+The source audit checked long/short side symmetry; strict profit-side price;
+nearest ordering with stable equal-price source order; confirmed-at and
+window-end fences; same setup timeframe; stale/BROKEN/SWEPT exclusion;
+duplicate level order; first eligible target precedence; exact decimal
+arithmetic; and stop/cost symmetry. The existing shared risk/structure tests
+exercise those conditions. Every recorded risk result matches a fresh call
+to the same shared engine; an independent level-exclusion pass found no
+eligible level in the 150 no-target cases. No target finder correctness
+defect was found, so production code and trading semantics were not changed.
+
+PRIMARY_FUNNEL_BOTTLENECK = TARGET_DISCOVERY_CORRECT_BUT_TOO_SPARSE.
+The 150/205 no-target gate dominates, and 129/150 no-target cases have <3R
+conservative favorable excursion; 20 stopped cases reach 3R without a valid
+structural target. Those facts support a focused future source-contract
+question, not blind relaxation or an optimization pass.
+
+PRODUCTION_STRATEGY_CONTRACT_READY = NO.
+ALPHA_OPTIMIZATION_CAN_START = NO.
+READY_ALLOWED = NO. PRODUCTION_READY = NO.
+NEXT_REQUIRED_ACTION = The strategy owner must resolve and approve all nine
+OWNER_DECISION_REQUIRED groups in PRODUCTION_STRATEGY_CONFIG_V1_CANDIDATE.json
+as a versioned production strategy configuration and cost/risk policy.

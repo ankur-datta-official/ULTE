@@ -1,0 +1,94 @@
+{
+  "id": "PRODUCTION_STRATEGY_CONFIG_V1_CANDIDATE",
+  "sourceRevision": "5c8145813aba54f0c2878bf4337fae6dea935cf9",
+  "status": "OWNER_DECISION_REQUIRED",
+  "productionApproved": false,
+  "executableAsEngineConfig": false,
+  "historicalPerformanceUsedToChooseValues": false,
+  "fixedPolicy": {
+    "minimumNetRewardRiskBps": 30000,
+    "authority": "PROJECT_SPEC.md and packages/risk-engine/src/config.ts",
+    "structureTimeframeEqualsSetupTimeframe": true,
+    "targetRule": "nearest active confirmed setup-timeframe level on the profit side, retaining equal-price source order",
+    "invalidationRule": "initiating sweep candle extreme for continuation/reversal; retest candle extreme for breakout; no buffer",
+    "confirmationRule": "existing setup-engine structural event/retest sequence",
+    "decisionRule": "exactly one confirmed actionable candidate; shared structural risk, portfolio risk, sizing, then intent"
+  },
+  "ownerDecisions": [
+    {
+      "id": "MARKET_AND_DATA_SOURCE",
+      "category": "ENVIRONMENTAL",
+      "fields": ["analysis.instrumentId", "analysis.source"],
+      "researchOnlyReference": "BTCUSDT Binance USD-M historical candles",
+      "productionValue": null
+    },
+    {
+      "id": "TIMEFRAME_ROLES",
+      "category": "ALPHA_TUNABLE",
+      "fields": ["analysis.timeframes[*].timeframe", "analysis.roles.regimeTimeframe", "analysis.roles.structureTimeframe", "analysis.roles.setupTimeframe"],
+      "researchOnlyReference": "BTCUSDT 1h decision/structure/setup, 4h regime, 1d observed but unused",
+      "productionValue": null
+    },
+    {
+      "id": "ANALYSIS_HISTORY_LIMITS",
+      "category": "ALPHA_TUNABLE",
+      "fields": ["analysis.timeframes[*].historyLimit"],
+      "researchOnlyReference": "1h=5, 4h=3, 1d=3",
+      "productionValue": null
+    },
+    {
+      "id": "REGIME_PARAMETERS",
+      "category": "ALPHA_TUNABLE",
+      "fields": ["analysis.regime.trendLookback", "analysis.regime.baselineVolatilityBars", "analysis.regime.recentVolatilityBars", "analysis.regime.trendEfficiencyMinBps", "analysis.regime.trendConsistencyMinBps", "analysis.regime.rangeEfficiencyMaxBps", "analysis.regime.rangeConsistencyMaxBps", "analysis.regime.compressionRatioMaxBps", "analysis.regime.expansionRatioMinBps"],
+      "researchOnlyReference": "REPLAY_CONFIG_EXPLORATORY_V1.json (test-derived)",
+      "productionValue": null
+    },
+    {
+      "id": "STRUCTURE_PARAMETERS",
+      "category": "ALPHA_TUNABLE",
+      "fields": ["analysis.structure.lookbackBars", "analysis.structure.pivotLeftBars", "analysis.structure.pivotRightBars"],
+      "researchOnlyReference": "lookback=5, left=1, right=1 (test-derived)",
+      "productionValue": null
+    },
+    {
+      "id": "SETUP_REGIME_ALLOWLISTS",
+      "category": "ALPHA_TUNABLE",
+      "fields": ["analysis.setup.continuationAllowedRegimes", "analysis.setup.breakoutAllowedRegimes", "analysis.setup.reversalAllowedRegimes"],
+      "researchOnlyReference": "REPLAY_CONFIG_EXPLORATORY_V1.json (test-derived)",
+      "productionValue": null
+    },
+    {
+      "id": "EXECUTION_COST_POLICY",
+      "category": "ENVIRONMENTAL",
+      "fields": ["decisionContext.riskCosts.entryCostBps", "decisionContext.riskCosts.targetExitCostBps", "decisionContext.riskCosts.stopExitCostBps"],
+      "researchOnlyReference": "7/7/7 bps all-in from explicit fee, spread, slippage assumptions",
+      "productionValue": null
+    },
+    {
+      "id": "REQUESTED_RISK_AND_PORTFOLIO_LIMITS",
+      "category": "SAFETY_POLICY",
+      "fields": ["decisionContext.requestedRiskAmount", "decisionContext.portfolioRiskConfig.maxRiskPerTradeBps", "decisionContext.portfolioRiskConfig.maxTotalOpenRiskBps", "decisionContext.portfolioRiskConfig.maxConcurrentPositions", "decisionContext.portfolioRiskConfig.maxDailyLossBps", "decisionContext.portfolioRiskConfig.riskGroupLimits[*].groupId", "decisionContext.portfolioRiskConfig.riskGroupLimits[*].maxRiskBps", "decisionContext.proposedRiskGroupIds"],
+      "decisionNeeded": "Set limits and the source/formula for each dynamic requested risk amount and proposed group assignment",
+      "researchOnlyReference": "1% current equity; 100/300 bps per trade/aggregate; 3 positions; 500 bps daily loss; no groups",
+      "productionValue": null
+    },
+    {
+      "id": "INSTRUMENT_SIZING_AND_FX",
+      "category": "ENVIRONMENTAL",
+      "fields": ["decisionContext.instrumentSizingSpec.valuationModel", "decisionContext.instrumentSizingSpec.pnlCurrency", "decisionContext.instrumentSizingSpec.quantityUnit", "decisionContext.instrumentSizingSpec.quantityStep", "decisionContext.instrumentSizingSpec.minimumQuantity", "decisionContext.instrumentSizingSpec.maximumQuantity", "decisionContext.instrumentSizingSpec.pnlValuePerPriceUnitPerQuantity", "decisionContext.fxConversion"],
+      "decisionNeeded": "Use venue-verified instrument metadata and a point-in-time FX source if PnL currency differs from account base currency",
+      "researchOnlyReference": "BTC linear USDT PnL; 0.001 BTC step/minimum; 1000 BTC maximum; unit PnL multiplier 1; no FX",
+      "productionValue": null
+    }
+  ],
+  "runtimeInputsNotConfig": [
+    "decisionContext.account.asOf",
+    "decisionContext.account.baseCurrency", "decisionContext.account.currentEquity",
+    "decisionContext.account.dayStartEquity", "decisionContext.account.openPositions",
+    "decisionContext.proposedRiskGroupIds", "decisionContext.fxConversion"
+  ],
+  "operationalIdentityAndRetention": [
+    "analysis.profileVersion", "analysis.cycleDeduplicationWindowSize",
+    "decision.profileVersion", "decision.recentDecisionWindowSize"
+  ]
+}
