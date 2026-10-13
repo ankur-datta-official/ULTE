@@ -554,6 +554,19 @@ describe("reconciliation", () => {
     expect(broker.submitEntry).not.toHaveBeenCalled();
   });
 
+  it("does not accept canonical rejection where no fenced outcome writer exists", async () => {
+    const { repository, request } = setup();
+    await expect(reconcileExecutionOutcome({
+      provider: { reconcile: async () => ({ status: "CONFIRMED_REJECTED_WITH_CANONICAL",
+        operation: "ENTRY_SUBMISSION", instrumentId, requestFingerprint: request.requestFingerprint,
+        rejection: createEntryRejection({ executionAttemptId: request.executionAttemptId,
+          idempotencyKey: request.idempotencyKey, adapterReasonCode: "venue-declined",
+          rejectedAt: 3_000 }) }) },
+      idempotencyRepository: repository, request, occurredAt: 3_000,
+    })).rejects.toThrow("fenced recoverable runtime");
+    expect((await repository.read(request.adapterId, request.idempotencyKey))?.status).toBe("OUTCOME_UNKNOWN");
+  });
+
   it("keeps STILL_UNKNOWN blocked", async () => {
     const { repository, request } = setup();
     const result = await reconcileExecutionOutcome({

@@ -1,0 +1,83 @@
+PHASE33C CANONICAL REJECTION CLOSURE — Task051
+
+Baseline: main and origin/main were 7e385b5cd60ea9299cd35f034dbcb700231d2f7b;
+the worktree was clean before Task051. Scope was limited to reconciliation authority,
+the recoverable runtime/fenced writer, focused tests, and this contract note.
+
+Original blocker: a plain CONFIRMED_REJECTED observation could establish broker
+disposition, but could not supply an execution-engine canonical rejection payload.
+It remained CANONICAL_OUTCOME_REQUIRED and never made a session READY.
+
+Selected authority contract: ReconciliationProvider may return the distinct
+CONFIRMED_REJECTED_WITH_CANONICAL variant. Its operation-discriminated rejection
+is the exact EntryRejection, ProtectionRejection, or CancellationRejection type.
+The provider also supplies instrumentId and requestFingerprint. It may construct
+this variant only from actual authoritative venue rejection evidence; the runtime
+never fills missing fields from error text, audit rows, or observation time.
+
+Payload mapping:
+- ENTRY_SUBMISSION: executionAttemptId, idempotencyKey, adapterReasonCode,
+  rejectedAt -> ENTRY_SUBMISSION_REJECTED.
+- PROTECTION_SUBMISSION: those fields plus protectionRequestId ->
+  PROTECTION_REJECTED.
+- ENTRY_CANCELLATION: those fields plus cancellationRequestId and
+  adapterOrderId -> ENTRY_CANCELLATION_REJECTED.
+The execution-engine constructors validate each typed payload. The fenced writer
+replays the current checkpoint and applies the matching rejection transition,
+checking the pending request, execution attempt, instrument, and cancellation
+order identity before any durable terminal write.
+
+Observation-only behavior: STILL_UNKNOWN remains RECONCILIATION_REQUIRED;
+CONFIRMED_NOT_SUBMITTED preserves explicit same-key retry authorization without
+automatic retry; CONFIRMED_ACCEPTED and plain CONFIRMED_REJECTED remain blocked
+until a canonical execution outcome exists. The generic reconciliation helper
+rejects the strong variant because it has no fenced canonical outcome writer.
+
+Canonical behavior: provider I/O follows a committed fenced preflight and occurs
+outside a database transaction. The existing fenced terminal outcome transaction
+persists REJECTED and a CANONICAL_EXECUTION_TRANSITION together. It does not use
+TERMINAL_NON_SUBMISSION. Optional immediate adoption uses the existing atomic
+adoptOutcome flow. If adoption is omitted or its response is lost, reboot sees
+OUTCOME_AVAILABLE and adoptAvailable converges from the durable outcome without
+a second provider call or duplicate submission.
+
+Malformed or conflicting evidence fails closed: operation, attempt, key,
+fingerprint, instrument, request ID, adapter order ID, reason, and timestamp
+checks reject invalid payloads. A competing accepted canonical outcome causes
+the fenced write to roll back; neither a rejected idempotency status nor a new
+canonical rejection is committed. No malformed strong result is downgraded to
+observation-only success.
+
+Source callsite review: the recoverable runtime has separate status branches.
+Only CONFIRMED_REJECTED_WITH_CANONICAL invokes persistPendingTerminalOutcome for
+provider rejection. Plain CONFIRMED_REJECTED goes to
+persistPendingReconciliationObservation and CANONICAL_OUTCOME_REQUIRED. No
+production callsite converts a plain rejection into a canonical transition.
+
+Verification: Task051 real PostgreSQL 8/8 PASS; affected C2B3 PostgreSQL
+17/17 PASS; sandbox E2E PostgreSQL 7/7 PASS; affected package tests 54/54 PASS.
+Focused total 86/86 PASS. Root TypeScript build PASS; PostgreSQL TypeScript
+typecheck PASS; git diff --check PASS. The test database was the existing
+ulte_b1f_test non-superuser role. Its temporary narrow HBA access rule was
+removed after each run; the original HBA checksum was verified after restore.
+
+Remaining limitation: no concrete production venue reconciliation adapter is
+present. The strong provider results exercised here are deterministic sandbox
+fakes, not a claim that any real venue supplies the required fields. A future
+venue integration must obtain all fields before using the strong variant.
+
+CANONICAL_REJECTION_AUTHORITY_CONTRACT = PASS
+PLAIN_CONFIRMED_REJECTED_FAILS_CLOSED = PASS
+ENTRY_CANONICAL_REJECTION = PASS
+PROTECTION_CANONICAL_REJECTION = PASS
+CANCELLATION_CANONICAL_REJECTION = PASS
+CANONICAL_REJECTION_PERSISTENCE = PASS
+CANONICAL_REJECTION_ADOPTION = PASS
+LOST_RESPONSE_RESTART = PASS
+NO_DUPLICATE_SUBMISSION = PASS
+NO_FAKE_REJECTION = PASS
+CALLSITE_AUDIT = PASS
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = CLOSED
+PHASE33C_FINAL_FREEZE_CAN_START = YES
+READY_ALLOWED = NO
+PRODUCTION_READY = NO

@@ -5,7 +5,8 @@ import { createCancellationAcknowledgement, createCancellationRejection,
   createEntryAcknowledgement, createEntryRejection, createProtectionAcknowledgement,
   createProtectionRejection, type EntryCancellationRequest, type EntrySubmissionRequest,
   type ProtectionRequest } from "@ulte/execution-engine";
-import { createReconciliationRequest, type ReconciliationProvider } from "@ulte/execution-reconciliation-engine";
+import { createReconciliationRequest, type CanonicalRejectionObservation,
+  type ReconciliationProvider } from "@ulte/execution-reconciliation-engine";
 import { unixMs, type UnixMs } from "@ulte/instrument-model";
 import { createOrchestrationExternalOutcome, orchestrationOutcomeKey,
   type AdoptOutcomeRequest, type ExecutionAuthorityCheckpoint, type OrchestrationRecoveryState,
@@ -69,6 +70,9 @@ export interface RecoverableReconciliationInput {
   readonly provider: ReconciliationProvider;
   readonly observedAt: UnixMs;
   readonly outcomeKey: string;
+  /** Optional immediate adoption; a later boot can adopt the durable outcome if omitted or interrupted. */
+  readonly adoptedCheckpoint?: AdoptOutcomeRequest["committedCheckpoint"];
+  readonly adoptedRecoveryState?: AdoptOutcomeRequest["resultingRecoveryState"];
 }
 export interface RecoverableAdoptionInput {
   readonly sessionId: OrchestrationSessionId;
@@ -153,6 +157,45 @@ function canonical(operation: Operation, response: AdapterResponse, request: Sub
       return { kind: "ENTRY_CANCELLATION_REJECTED", rejection }; }
   }
   throw new TypeError("Invalid adapter response");
+}
+function exactCanonicalRejection(observation: CanonicalRejectionObservation,
+  boot: Reconciliation): Canonical {
+  if (Object.keys(observation).length !== 5
+      || !["status", "operation", "instrumentId", "requestFingerprint", "rejection"]
+        .every((key) => Object.prototype.hasOwnProperty.call(observation, key))
+      || observation.operation !== boot.pendingEffect.operation
+      || observation.requestFingerprint !== boot.pendingEffect.requestFingerprint
+      || typeof observation.instrumentId !== "string" || observation.instrumentId.length === 0) {
+    throw new TypeError("Canonical reconciliation rejection authority mismatch");
+  }
+  const raw = observation.rejection;
+  if (typeof raw !== "object" || raw === null) throw new TypeError("Missing canonical rejection");
+  const rejection = observation.operation === "ENTRY_SUBMISSION"
+    ? createEntryRejection(raw)
+    : observation.operation === "PROTECTION_SUBMISSION"
+      ? createProtectionRejection(raw as import("@ulte/execution-engine").ProtectionRejection)
+      : createCancellationRejection(raw as import("@ulte/execution-engine").CancellationRejection);
+  if (Object.keys(raw).length !== Object.keys(rejection).length
+      || Object.keys(rejection).some((key) =>
+        (raw as unknown as Record<string, unknown>)[key] !==
+          (rejection as unknown as Record<string, unknown>)[key])
+      || rejection.executionAttemptId !== boot.pendingEffect.executionAttemptId
+      || rejection.idempotencyKey !== boot.pendingEffect.idempotencyKey) {
+    throw new TypeError("Noncanonical reconciliation rejection payload");
+  }
+  if (observation.operation === "ENTRY_SUBMISSION" && rejection.kind === "SUBMISSION_REJECTED") {
+    const { kind: _kind, ...payload } = rejection;
+    return { kind: "ENTRY_SUBMISSION_REJECTED", rejection: payload };
+  }
+  if (observation.operation === "PROTECTION_SUBMISSION" && rejection.kind === "PROTECTION_REJECTED") {
+    const { kind: _kind, ...payload } = rejection;
+    return { kind: "PROTECTION_REJECTED", rejection: payload };
+  }
+  if (observation.operation === "ENTRY_CANCELLATION" && rejection.kind === "CANCEL_REJECTED") {
+    const { kind: _kind, ...payload } = rejection;
+    return { kind: "ENTRY_CANCELLATION_REJECTED", rejection: payload };
+  }
+  throw new TypeError("Canonical rejection operation mismatch");
 }
 function outcome(boot: Intent | Reconciliation, key: string, at: UnixMs,
   observation: OrchestrationExternalOutcome["observation"]): OrchestrationExternalOutcome {
@@ -302,6 +345,9 @@ export class RecoverableOrchestrationRuntime {
   }
 
   public async reconcile(input: RecoverableReconciliationInput): Promise<RecoverableRuntimeResult> {
+    if ((input.adoptedCheckpoint === undefined) !== (input.adoptedRecoveryState === undefined)) {
+      throw new TypeError("Canonical reconciliation adoption authority must be complete");
+    }
     const boot = await this.boot(input.sessionId, input.ownerId);
     if (boot.status === "TERMINAL_NON_SUBMISSION") return { status: "TERMINAL_NON_SUBMISSION" };
     if (boot.status !== "RECONCILIATION_REQUIRED" || boot.pendingEffect.environment !== "SANDBOX") return blocked(boot);
@@ -314,6 +360,28 @@ export class RecoverableOrchestrationRuntime {
       ...identity(boot), ...(boot.idempotency.record.adapterOrderId === undefined ? {}
         : { adapterOrderId: boot.idempotency.record.adapterOrderId }) })); }
     catch { return { status: "RECONCILIATION_REQUIRED" }; }
+    if (observation.status === "CONFIRMED_REJECTED_WITH_CANONICAL") {
+      const transition = exactCanonicalRejection(observation, boot);
+      const canonicalOutcome = outcome(boot, input.outcomeKey, input.observedAt,
+        { kind: "CANONICAL_EXECUTION_TRANSITION", transition });
+      const orderId = "rejection" in transition && "adapterOrderId" in transition.rejection
+        ? transition.rejection.adapterOrderId : undefined;
+      const saved = await this.port.pending.persistPendingTerminalOutcome({ ...a,
+        update: update(boot, "REJECTED", input.observedAt, orderId), outcome: canonicalOutcome,
+        canonicalInstrumentId: observation.instrumentId });
+      if (saved.status !== "PERSISTED") return lost(saved);
+      if (input.adoptedCheckpoint === undefined || input.adoptedRecoveryState === undefined) {
+        return { status: "OUTCOME_AVAILABLE", outcome: canonicalOutcome };
+      }
+      const adopted = await this.port.adoption.adoptOutcome({ sessionId: boot.sessionId,
+        ownerId: boot.ownerId, expectedRevision: boot.recoveryRevision, expectedFence: boot.fenceToken,
+        previousCheckpointRef: a.expectedCheckpointRef, outcomeKey: canonicalOutcome.outcomeKey,
+        committedCheckpoint: input.adoptedCheckpoint,
+        resultingRecoveryState: input.adoptedRecoveryState, nextPendingEffectIdentity: null });
+      return adopted.status === "ADOPTED" || adopted.status === "ALREADY_ADOPTED"
+        ? { status: "ADOPTED", outcomeKey: canonicalOutcome.outcomeKey, outcome: canonicalOutcome }
+        : { status: "OUTCOME_AVAILABLE", outcome: canonicalOutcome };
+    }
     const status = observation.status;
     const disposition = outcome(boot, input.outcomeKey, input.observedAt,
       { kind: "BROKER_DISPOSITION", disposition: observation });

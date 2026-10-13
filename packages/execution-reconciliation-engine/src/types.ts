@@ -1,4 +1,4 @@
-import type { UnixMs } from "@ulte/instrument-model";
+import type { InstrumentId, UnixMs } from "@ulte/instrument-model";
 import type {
   BrokerAdapter,
   BrokerAuditSink,
@@ -143,8 +143,20 @@ export type ReconciliationObservation =
   | { readonly status: "CONFIRMED_NOT_SUBMITTED" }
   | { readonly status: "STILL_UNKNOWN"; readonly adapterOrderId?: string };
 
+/** Only a provider holding the complete venue rejection may return this stronger result. */
+export type CanonicalRejectionObservation =
+  | { readonly status: "CONFIRMED_REJECTED_WITH_CANONICAL";
+      readonly operation: "ENTRY_SUBMISSION"; readonly instrumentId: InstrumentId;
+      readonly requestFingerprint: RequestFingerprint; readonly rejection: EntryRejection }
+  | { readonly status: "CONFIRMED_REJECTED_WITH_CANONICAL";
+      readonly operation: "PROTECTION_SUBMISSION"; readonly instrumentId: InstrumentId;
+      readonly requestFingerprint: RequestFingerprint; readonly rejection: ProtectionRejection }
+  | { readonly status: "CONFIRMED_REJECTED_WITH_CANONICAL";
+      readonly operation: "ENTRY_CANCELLATION"; readonly instrumentId: InstrumentId;
+      readonly requestFingerprint: RequestFingerprint; readonly rejection: CancellationRejection };
+
 export interface ReconciliationProvider {
-  reconcile(request: ReconciliationRequest): Promise<ReconciliationObservation>;
+  reconcile(request: ReconciliationRequest): Promise<ReconciliationObservation | CanonicalRejectionObservation>;
 }
 
 export interface ReconciliationInput {

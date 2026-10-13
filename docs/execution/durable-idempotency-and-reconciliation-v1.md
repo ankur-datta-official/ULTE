@@ -42,6 +42,17 @@ Accepted/rejected observations persist their terminal state without submission. 
 observations remain blocked. Only the explicit non-submission observation authorizes a later
 same-key retry; reconciliation itself never submits or creates a new logical key.
 
+The recoverable PostgreSQL runtime distinguishes a plain `CONFIRMED_REJECTED` broker disposition
+from `CONFIRMED_REJECTED_WITH_CANONICAL`. The plain disposition records only observed rejection and
+boots as `CANONICAL_OUTCOME_REQUIRED`; it never becomes an execution rejection transition. The
+strong variant binds the operation, instrument, request fingerprint, and the exact entry,
+protection, or cancellation rejection produced by the execution-engine contract. The runtime and
+fenced writer validate that payload against the pending effect and replayable execution checkpoint,
+then atomically persist `REJECTED` with the canonical execution outcome. Adoption may follow in the
+same call or after reboot through `adoptAvailable`, without another provider call or submission.
+The generic `reconcileExecutionOutcome` path does not have a fenced canonical outcome writer and
+rejects the strong variant. No concrete venue reconciliation adapter is supplied by this contract.
+
 The public `recordOutcome` result distinguishes `APPLIED_TRANSITION`, `APPLIED_ENRICHMENT`,
 `DUPLICATE_SAME`, and `STATUS_CONFLICT`; each carries the durable record. A same-status delivery
 with no new durable information is a duplicate and leaves `updatedAt` unchanged. The sole

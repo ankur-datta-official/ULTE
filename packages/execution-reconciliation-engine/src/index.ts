@@ -10,6 +10,7 @@ export {
 } from "./reconciliation.js";
 export type {
   AuditDeliveryStatus,
+  CanonicalRejectionObservation,
   CancellationOrchestrationResult,
   ConfirmedResult,
   DoNotRetryResult,

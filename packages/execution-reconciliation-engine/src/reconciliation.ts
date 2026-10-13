@@ -189,7 +189,11 @@ export async function reconcileExecutionOutcome(
     return result;
   }
 
-  const observation = snapshotObservation(await input.provider.reconcile(input.request));
+  const supplied = await input.provider.reconcile(input.request);
+  if (supplied.status === "CONFIRMED_REJECTED_WITH_CANONICAL") {
+    throw new TypeError("Canonical rejection requires the fenced recoverable runtime");
+  }
+  const observation = snapshotObservation(supplied);
   if (observation.status === "CONFIRMED_ACCEPTED") {
     const record = await persistOutcome(input.idempotencyRepository, {
       adapterId,

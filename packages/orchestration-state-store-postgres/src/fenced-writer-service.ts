@@ -3,6 +3,8 @@ import {
   PersistenceConflictError as IdempotencyPersistenceConflictError,
   PersistenceCorruptionError as IdempotencyPersistenceCorruptionError,
 } from "@ulte/execution-store-postgres";
+import { rejectCancellation, rejectEntrySubmission, rejectProtection,
+  restoreExecutionAttemptFromEvidence } from "@ulte/execution-engine";
 import {
   createOrchestrationExternalOutcome, createOrchestrationPendingEffectIdentity,
   equalCanonicalJson, executionAuthorityCheckpointId, orchestrationFenceToken,
@@ -53,6 +55,8 @@ export interface PendingOutcomeRequest extends PendingWriterAuthority { readonly
 export interface PendingTerminalRequest extends PendingWriterAuthority {
   readonly update: StatusInput;
   readonly outcome: OrchestrationExternalOutcome;
+  /** Required for a provider-supplied canonical rejection; checked against durable execution authority. */
+  readonly canonicalInstrumentId?: string;
 }
 export interface PendingReconciliationRequest extends PendingWriterAuthority {
   readonly update: StatusInput;
@@ -322,6 +326,27 @@ export class PostgresOrchestrationFencedWriterService {
     assertIdentity(input.update, input.pendingEffectIdentity);
     terminalCoherence(input.update, input.outcome);
     return this.run(input, async (tx, request) => {
+      if (input.canonicalInstrumentId !== undefined) {
+        const checkpoint = await loadExecutionAuthorityCheckpointInTransaction(tx, request.expectedCheckpointRef);
+        if (checkpoint === null || checkpoint.evidence.identity.instrumentId !== input.canonicalInstrumentId
+            || input.outcome.observation.kind !== "CANONICAL_EXECUTION_TRANSITION") {
+          throw new TypeError("Canonical reconciliation instrument or transition mismatch");
+        }
+        const restored = restoreExecutionAttemptFromEvidence(checkpoint.evidence);
+        if (restored.status !== "EXECUTION_ATTEMPT_RESTORED") {
+          throw new TypeError("Pending execution authority cannot replay");
+        }
+        const transition = input.outcome.observation.transition;
+        const applied = transition.kind === "ENTRY_SUBMISSION_REJECTED"
+          ? rejectEntrySubmission(restored.executionAttempt, transition.rejection)
+          : transition.kind === "PROTECTION_REJECTED"
+            ? rejectProtection(restored.executionAttempt, transition.rejection)
+            : transition.kind === "ENTRY_CANCELLATION_REJECTED"
+              ? rejectCancellation(restored.executionAttempt, transition.rejection) : null;
+        if (applied?.status !== "EXECUTION_ATTEMPT_UPDATED") {
+          throw new TypeError("Canonical reconciliation rejection contradicts pending execution authority");
+        }
+      }
       const idempotency = await recordIdempotencyOutcomeInTransaction(tx,
         { ...input.update, executionAttemptId: request.pendingEffectIdentity.executionAttemptId,
           operation: request.pendingEffectIdentity.operation });
