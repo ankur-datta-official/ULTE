@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.postgres.json",
+  "include": ["tests/integration/sandbox-e2e-postgres.test.ts"]
+}

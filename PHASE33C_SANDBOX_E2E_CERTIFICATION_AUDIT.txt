@@ -1,0 +1,105 @@
+Phase33C recoverable SANDBOX end-to-end certification
+Date: 2026-10-13 (Asia/Dhaka)
+Baseline HEAD/origin/main: e1b4c6fc2bafde70199e71af1cac7a96312efbc6
+Initial worktree: clean.
+
+Files changed
+- tests/integration/sandbox-e2e-postgres.test.ts: focused real PostgreSQL lifecycle suite.
+- tsconfig.sandbox-e2e.json and vitest.sandbox-e2e.config.ts: focused type/test commands.
+- vitest.config.ts: exclude real PostgreSQL E2E from the default unit run.
+- PHASE33C_SANDBOX_E2E_CERTIFICATION_AUDIT.txt: this audit.
+No production package, migration, shared test helper, or frozen authority code changed.
+
+Integrated happy path
+- Fresh PostgreSQL schema: initial boot READY classification, atomic pending-intent commit,
+  D4 intent boot, fenced claim and committed SUBMITTED marker, one typed fake SANDBOX
+  entry acknowledgement, fenced canonical outcome persistence, atomic adoption,
+  and three fresh-runtime reboots.
+- Durable state after adoption: recovery revision 3 and adopted checkpoint; pending
+  RESOLVED to the exact outcome key; broker CONFIRMED; one canonical outcome, one
+  pending-intent receipt, and one adoption receipt. Three reboots remain READY
+  classified with unchanged durable recovery state. READY classification does not
+  activate production execution.
+- Identical command after adoption and a different same-key request fingerprint
+  both block. The conflicting payload also blocks before the first claim.
+  No second broker invocation, receipt, revision, or outcome appears.
+
+Crash and restart matrix
+- A claim committed before SUBMITTED: three new runtimes classify INTENT_DISPOSITION_REQUIRED;
+  no blind submit. B committed SUBMITTED before adapter I/O: three new runtimes require
+  reconciliation; no broker call. C adapter invoked but outcome transaction rolled
+  back: reboot requires reconciliation; exactly one broker call.
+- D canonical outcome committed but response lost: reboot exposes OUTCOME_AVAILABLE,
+  adoption converges, and three further reboots remain stable without resubmission.
+- E SUBMITTED COMMIT succeeded but its response was lost: fresh boot requires
+  reconciliation without invoking the adapter. F after D3N terminal commit: three
+  fresh runtimes remain TERMINAL_NON_SUBMISSION with no further provider call.
+
+Failure and reconciliation matrix
+- Trusted DEFINITE_FAILURE + NOT_SUBMITTED + DO_NOT_RETRY closes through D3N:
+  terminal recovery V2, RESOLVED pending, FAILED_NOT_SUBMITTED broker row, and
+  exactly one terminal receipt. Repeated submit/reconcile do not invoke providers.
+- Ambiguous failure leaves OUTCOME_UNKNOWN and three stable reconciliation-required
+  reboots; no retry or terminal receipt. Lost lease/fence blocks submission before
+  any broker row or provider invocation.
+- CONFIRMED_ACCEPTED and CONFIRMED_REJECTED persist truthful broker dispositions
+  but remain CANONICAL_OUTCOME_REQUIRED without exact typed canonical payload.
+  CONFIRMED_NOT_SUBMITTED remains explicit same-key retry authority; no automatic
+  submission. STILL_UNKNOWN remains reconciliation-required. Each disposition was
+  observed once and persisted once. No canonical rejection was fabricated or adopted.
+
+Provider accounting and transaction proof
+- Happy entry: entry=1, protection=0, cancellation=0. Crash-before-I/O variants:
+  entry=0. Outcome-loss variants and both failure variants: entry=1, no resubmit.
+  Reconciliation variants: entry=1, reconciliation=1, no extra calls. Terminal
+  follow-up: reconciliation=0. Stale fence: entry=0.
+- Protection and cancellation each use the production recoverable composer with
+  one typed acknowledgement and one corresponding provider call; the other two
+  operation counters remain zero. Both persist CONFIRMED and reboot coherently.
+  All three operations are supported; no unsupported execution operation was
+  invented for the suite.
+- The wrapped PostgreSQL executor tracks active snapshot/write transactions.
+  Fake entry, protection, cancellation, and reconciliation providers assert no
+  runtime transaction is active at invocation. The entry fake also reads the
+  committed SUBMITTED row before acknowledging.
+- No unbounded loop, DB polling storm, automatic retry loop, or duplicate provider
+  call appeared. Each scenario uses bounded calls and three sequential reboots.
+
+Verification and cleanup
+- Final focused real PostgreSQL E2E suite: 7/7 PASS. Interrupted runs were not
+  counted as passes. One initial test query referenced a pre-migration column;
+  corrected to resolved_authority_ref. No production defect was found or fixed.
+- Root typecheck, PostgreSQL typecheck, and E2E typecheck: PASS. No package
+  production file changed, so prior package/D3/D3N/D4/D5/B1F/D2C proofs were
+  not invalidated and those suites were not rerun. git diff --check: PASS.
+- One run was interrupted by WSL PostgreSQL fast shutdown. The exact temporary
+  HBA prefix was removed and the original SHA-256 was verified. A later run
+  held WSL active and used a durable temporary backup. Final HBA original and
+  restored SHA-256 both equal
+  dd4247892b7a3843814dc485cb55df577103fa4ecf97a9c81f9d2c79ea989e67.
+  The temporary backup was removed. The one interrupted disposable schema
+  identified by this suite's unique reconcile-e2e outcome was removed.
+  Other pre-existing disposable schemas were left untouched.
+- Changed-file security scan: no credential, password, API key, hardcoded
+  exchange endpoint, IP, persistent trust rule, .only/.skip, or debug code.
+- Quick recoverable-composer callsite check: no raw standalone
+  FAILED_NOT_SUBMITTED writer, blind retry, terminal fallthrough, stale-fence
+  provider call, provider I/O inside a DB transaction, or fake canonical rejection.
+
+SANDBOX_HAPPY_PATH = PASS
+RESTART_RECOVERY = PASS
+CRASH_MATRIX = PASS
+NO_DUPLICATE_SUBMISSION = PASS
+D3N_TERMINAL_E2E = PASS
+AMBIGUOUS_FAILURE_E2E = PASS
+STALE_AUTHORITY_BLOCK = PASS
+TERMINAL_PROVIDER_BLOCK = PASS
+RECONCILIATION_E2E = PASS
+MULTI_RESTART_STABILITY = PASS
+NO_TRANSACTION_ACROSS_IO = PASS
+CONFIRMED_REJECTED_WITHOUT_CANONICAL_EVIDENCE_FAILS_CLOSED = PASS
+SANDBOX_RUNTIME_CERTIFIED = YES
+NEXT_BLOCKER = RECONCILIATION_CANONICAL_REJECTION
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN
+READY_ALLOWED = NO
+PRODUCTION_READY = NO
