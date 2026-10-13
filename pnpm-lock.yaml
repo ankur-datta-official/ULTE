@@ -213,6 +213,15 @@ importers:
 
   packages/orchestration-state-store-postgres:
     dependencies:
+      '@ulte/broker-adapters':
+        specifier: workspace:*
+        version: link:../broker-adapters
+      '@ulte/execution-engine':
+        specifier: workspace:*
+        version: link:../execution-engine
+      '@ulte/execution-reconciliation-engine':
+        specifier: workspace:*
+        version: link:../execution-reconciliation-engine
       '@ulte/execution-store-postgres':
         specifier: workspace:*
         version: link:../execution-store-postgres
@@ -228,13 +237,6 @@ importers:
       '@ulte/sandbox-orchestration-recovery':
         specifier: workspace:*
         version: link:../sandbox-orchestration-recovery
-    devDependencies:
-      '@ulte/broker-adapters':
-        specifier: workspace:*
-        version: link:../broker-adapters
-      '@ulte/execution-engine':
-        specifier: workspace:*
-        version: link:../execution-engine
 
   packages/portfolio-risk-engine:
     dependencies:

@@ -29,3 +29,7 @@ export type { PostgresExecutor, PostgresQueryResult, PostgresSnapshotExecutor,
   PostgresTransaction } from "./postgres.js";
 export { PostgresRecoveryBootLoader } from "./recovery-boot-loader.js";
 export type { PostgresRecoveryBootResult } from "./recovery-boot-loader.js";
+export { RecoverableOrchestrationRuntime, createPostgresRecoverableOrchestrationRuntime } from "./recoverable-runtime.js";
+export type { RecoverablePersistencePort, RecoverableSubmissionInput, RecoverableReconciliationInput,
+  RecoverableAdoptionInput,
+  RecoverableRuntimeResult } from "./recoverable-runtime.js";

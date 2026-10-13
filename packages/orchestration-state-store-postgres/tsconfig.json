@@ -8,6 +8,9 @@
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"],
   "references": [
+    { "path": "../broker-adapters" },
+    { "path": "../execution-engine" },
+    { "path": "../execution-reconciliation-engine" },
     { "path": "../../tools/migration-coordinator" },
     { "path": "../execution-store-postgres" },
     { "path": "../instrument-model" },

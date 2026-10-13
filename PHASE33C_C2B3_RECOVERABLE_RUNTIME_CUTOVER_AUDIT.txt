@@ -1,0 +1,111 @@
+Phase33C C2B3 recoverable runtime cutover audit
+Date: 2026-10-13 (Asia/Dhaka)
+Baseline HEAD and origin/main: daf14a516f1dc1d40c7e29c3a96b93814f0e5506
+
+Worktree recovery
+- All nine initially dirty paths were C2B3 work based on the baseline. No unrelated work was found, reset, stashed, or discarded.
+- A runtime implementation: packages/orchestration-state-store-postgres/src/recoverable-runtime.ts.
+- B runtime export/dependencies: that package's src/index.ts, package.json, tsconfig.json, and pnpm-lock.yaml.
+- B focused tests/config: tests/integration/c2b3-postgres.test.ts, tsconfig.c2b3-postgres.json,
+  vitest.c2b3-postgres.config.ts, and root vitest.config.ts.
+- This is the only C2B3 closeout audit. The existing implementation was resumed, not recreated.
+
+Old unsafe route and cutover
+- execution-reconciliation-engine/src/orchestration.ts selected FAILED_NOT_SUBMITTED at line 224
+  and passed it through internal.ts persistOutcome to a raw IdempotencyRepository.recordOutcome.
+  It could leave FAILED_NOT_SUBMITTED with an unresolved PENDING effect if used for recoverable orchestration.
+- RecoverableOrchestrationRuntime instead accepts a narrow RecoverablePersistencePort and the
+  PostgreSQL composer supplies only D4 boot, fenced pending writer, D3N terminal commit, and
+  atomic adoption services. It does not inject IdempotencyRepository or call the legacy
+  orchestrator. Lower-level APIs remain for other modes and infrastructure.
+- Runtime dependency graph: broker adapter -> typed result/failure; D4 boot -> snapshot;
+  fenced writer -> lease/recovery/pending/idempotency/outcome; D3N -> atomic terminal
+  broker/pending/recovery/receipt closure; commit service -> canonical outcome adoption;
+  reconciliation provider -> typed observation -> fenced writer.
+
+Pre-I/O authority and transaction boundary
+- A submission needs SANDBOX, matching adapter/request/pending identity and fingerprint,
+  a nonterminal D4 intent classification, and ABSENT idempotency or an explicitly requested
+  same-key retry from RETRY_AUTHORIZED. CLAIMED, SUBMITTED, unknown, terminal, and stale
+  states cannot submit blindly.
+- The fenced claim commits first. A separate fenced SUBMITTED write commits second. A
+  further committed fenced check reauthorizes the current lease, revision, checkpoint,
+  pending identity, and SUBMITTED state immediately before adapter invocation.
+- The adapter is called only after those transactions end. Reconciliation similarly makes
+  a committed fenced OUTCOME_UNKNOWN preflight before calling the provider. Returned facts
+  are saved in a new fenced transaction. No transaction spans broker/provider I/O.
+- Terminal boot returns TERMINAL_NON_SUBMISSION for submit, reconcile, and adoptAvailable
+  without provider invocation.
+
+Outcome routes
+- Typed entry, protection, and cancellation acknowledgements/rejections are validated
+  against request identity, persisted with the matching canonical transition and broker
+  status, then offered to atomic adoption. No order ID, fill, timestamp, or rejection is
+  synthesized. An already persisted canonical outcome can be adopted after reboot without
+  calling the adapter again.
+- A typed definite NOT_SUBMITTED, DO_NOT_RETRY adapter failure goes directly to
+  commitNormalTerminalNonSubmissionDisposition. D3N atomically writes FAILED_NOT_SUBMITTED,
+  terminal receipt, PENDING resolution, and terminal recovery ref. No split status write.
+- Ambiguous failures and generic thrown ORDER_REJECTED become OUTCOME_UNKNOWN and require
+  reconciliation. A frozen retry-safe definite non-submission may return RETRY_AUTHORIZED;
+  the next submission requires an explicit same-key request and fresh authority.
+- Reconciliation observations are persisted through the fenced writer. STILL_UNKNOWN
+  remains blocked; CONFIRMED_NOT_SUBMITTED permits only explicit same-key retry;
+  CONFIRMED_ACCEPTED and CONFIRMED_REJECTED without operation-specific canonical evidence
+  return CANONICAL_OUTCOME_REQUIRED. A broker disposition is never adopted as canonical.
+
+Crash boundaries covered on real PostgreSQL
+- CLAIMED without SUBMITTED: intent disposition, no blind broker call.
+- SUBMITTED before adapter call: reboot requires reconciliation, no second submission.
+- Adapter call before outcome persistence: reboot requires reconciliation, no retry.
+- Trusted definite non-submission: D3N closes the broker, pending, and recovery atomically.
+- Canonical outcome committed but response lost: boot finds outcome; adoption converges
+  without resubmission.
+
+Callsite/source audit
+- Complete production TypeScript search covered FAILED_NOT_SUBMITTED, recordOutcome,
+  IdempotencyRepository, recordIdempotencyOutcome, and recordIdempotencyOutcomeInTransaction.
+- Broker-adapters defines the generic contract/state machine; execution-store-postgres
+  implements generic infrastructure; execution-reconciliation-engine retains legacy
+  orchestration/reconciliation; realtime submission/protection retain legacy dependencies;
+  sandbox-orchestration-recovery only classifies durable state. None is injected into the
+  new recoverable PostgreSQL composer.
+- The fenced writer rejects independent FAILED_NOT_SUBMITTED at type and runtime boundaries.
+  Its terminal canonical method requires a coherent typed canonical transition. D3N is
+  the only reachable normal recoverable writer of FAILED_NOT_SUBMITTED. No blind retry,
+  provider I/O in a transaction, terminal fallthrough, stale-fence provider call,
+  fabricated rejection, or default success fallback was found in the new composition.
+
+Verification
+- Focused C2B3 real PostgreSQL integration: 17/17 PASS, including entry/protection/cancel,
+  D3N, ambiguous and retry routes, stale fence, terminal gate, canonical blocker,
+  crash boundaries, and provider/adapter calls outside transactions.
+- Directly affected orchestration-state-store-postgres package: 118/118 PASS.
+- Root TypeScript build: PASS. PostgreSQL TypeScript check: PASS. C2B3 TypeScript check: PASS.
+- git diff --check: PASS (only Git working-copy line-ending notices).
+- D3N/D4/D5/B1F real suites were not rerun: their shared production/helper files were untouched.
+- The dedicated real PostgreSQL test database and non-superuser test role were used with
+  deterministic fake adapters/providers. A temporary database/role/host-specific HBA
+  bridge was removed after each run; original and restored SHA-256 matched exactly
+  (dd4247892b7a3843814dc485cb55df577103fa4ecf97a9c81f9d2c79ea989e67).
+- Changed-file security scan: no credential, password, API key, hardcoded endpoint/IP,
+  persistent trust rule, .only/.skip, or debug code.
+
+C2B3_RUNTIME_CUTOVER = PASS
+RECOVERABLE_SAFE_PORT = PASS
+SUBMITTED_BEFORE_IO = PASS
+NO_DB_TRANSACTION_ACROSS_IO = PASS
+STALE_FENCE_BLOCKS_IO = PASS
+TERMINAL_BLOCKS_IO = PASS
+CANONICAL_SUCCESS_PATH = PASS
+D3N_NORMAL_FAILURE_PATH = PASS
+AMBIGUOUS_FAILURE_PATH = PASS
+RECONCILIATION_PATH = PASS
+GENERIC_ORDER_REJECTED_NOT_FABRICATED = PASS
+LEGACY_SPLIT_STATUS_ROUTE_BLOCKED = PASS
+CRASH_RECOVERY_MATRIX = PASS
+CALLSITE_AUDIT = PASS
+REAL_POSTGRES_VERIFIED_FOR_C2B3 = YES
+SANDBOX_E2E_CAN_START = YES
+READY_ALLOWED = NO
+RECONCILIATION_CANONICAL_REJECTION_BLOCKER = OPEN

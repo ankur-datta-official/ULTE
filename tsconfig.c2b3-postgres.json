@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.postgres.json",
+  "include": ["tests/integration/c2b3-postgres.test.ts"]
+}
