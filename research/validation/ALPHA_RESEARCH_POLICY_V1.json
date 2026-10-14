@@ -1,0 +1,57 @@
+{
+  "id": "ALPHA_RESEARCH_POLICY_V1",
+  "status": "UNTUNED_PRE_OPTIMIZATION_BASELINE",
+  "provenance": "REPLAY_CONFIG_EXPLORATORY_V1.json from the corrected Task056 BTCUSDT baseline; copied before the fixed core-universe replay, without performance selection",
+  "venue": "Binance",
+  "market": "USD-M perpetual futures",
+  "coreUniverse": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "LINKUSDT"],
+  "historicalEndExclusive": "2026-10-01T00:00:00Z",
+  "canonicalRawTimeframe": "15m",
+  "derivedTimeframes": ["1h", "4h", "1d"],
+  "decisionTimeframe": "1h",
+  "contextTimeframes": ["4h", "1d"],
+  "detailTimeframeUse": ["MFE_MAE", "CONSERVATIVE_INTRABAR_ORDERING", "EXECUTION_PATH_DIAGNOSTICS"],
+  "analysis": {
+    "profileVersion": "ALPHA_RESEARCH_POLICY_V1",
+    "timeframes": [
+      {"timeframe": "1h", "historyLimit": 5},
+      {"timeframe": "4h", "historyLimit": 3},
+      {"timeframe": "1d", "historyLimit": 3}
+    ],
+    "roles": {"regimeTimeframe": "4h", "structureTimeframe": "1h", "setupTimeframe": "1h"},
+    "regime": {
+      "trendLookback": 2,
+      "baselineVolatilityBars": 1,
+      "recentVolatilityBars": 1,
+      "trendEfficiencyMinBps": 7000,
+      "trendConsistencyMinBps": 7000,
+      "rangeEfficiencyMaxBps": 3000,
+      "rangeConsistencyMaxBps": 3000,
+      "compressionRatioMaxBps": 8000,
+      "expansionRatioMinBps": 12000
+    },
+    "structure": {"lookbackBars": 5, "pivotLeftBars": 1, "pivotRightBars": 1},
+    "setup": {
+      "continuationAllowedRegimes": ["TREND_UP", "TREND_DOWN"],
+      "breakoutAllowedRegimes": ["TREND_UP", "TREND_DOWN", "RANGE"],
+      "reversalAllowedRegimes": ["RANGE", "TRANSITION"]
+    },
+    "cycleDeduplicationWindowSize": 16
+  },
+  "decision": {"recentDecisionWindowSize": 16},
+  "costs": {"entryFeeBps": 5, "exitFeeBps": 5, "entrySlippageBps": 1, "exitSlippageBps": 1, "spreadBps": 1},
+  "risk": {"minimumNetRewardRiskBps": 30000},
+  "signalExecution": {
+    "entry": "next 15m open with adverse slippage and spread",
+    "stop": "worse of stop barrier or gap open, with adverse exit slippage and spread",
+    "target": "target barrier with adverse exit slippage and spread",
+    "sameBarStopAndTarget": "STOP_FIRST",
+    "fees": "entry and exit notional at the disclosed basis-point rates",
+    "funding": "observed archived settlements only; entry notional proxy; possible exit-bar debits count and ambiguous credits do not",
+    "overlap": "independent signal-level outcomes; no portfolio suppression",
+    "unresolvedAtCutoff": "right censored, excluded from executed closed-trade metrics"
+  },
+  "rejectedCandidateDiagnostic": "from next 15m open to first invalidation; stop-bar favorable excursion uses open as conservative lower bound; gross entry-to-stop distance denominator; never an executed trade",
+  "researchSeparation": "Signal eligibility and signal-level R outcomes are independent of production portfolio sizing and venue quantity metadata. Live integration decisions remain open.",
+  "productionApproved": false
+}

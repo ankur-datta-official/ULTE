@@ -1,0 +1,188 @@
+TRADING INTELLIGENCE CORE UNIVERSE BASELINE AUDIT - Task058
+Source revision: c20e1cbedefd2fdb68057a60c10477627f416d4f (clean requested baseline).
+VERDICT = UNTUNED_CORE_UNIVERSE_RESEARCH_BASELINE; ALPHA_NOT_CERTIFIED.
+ALPHA_RESEARCH_POLICY_READY = YES. PRODUCTION_LIVE_STRATEGY_CONFIG_READY = NO.
+READY_ALLOWED = NO. PRODUCTION_READY = NO.
+
+1. FROZEN RESEARCH CONTRACT
+ALPHA_RESEARCH_POLICY_V1.json is the versioned UNTUNED_PRE_OPTIMIZATION_BASELINE.
+The alpha-sensitive numeric fields and allowlists exactly copy the corrected Task056
+REPLAY_CONFIG_EXPLORATORY_V1.json. They were test-derived before the BTC outcome and
+are not historically optimal. The shared trading engines were not changed.
+Venue Binance; market USD-M perpetual futures; fixed product universe: BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT, ADAUSDT, DOGEUSDT, LINKUSDT.
+Decision 1h; context 4h and 1d; checksum-verified 15m is canonical raw price.
+Closed 1h/4h/1d candles are deterministically aggregated from that 15m path and
+enter decisions only at their close. The 15m detail is used only after a decision
+for fills, MFE/MAE, and conservative same-bar stop/target ordering.
+No candle open or funding event timestamp at or after 2026-10-01T00:00:00Z
+entered this task; the last pre-cutoff candle closes at that exclusive boundary. The original
+WALK_FORWARD_PROTOCOL_V1.md remains unchanged; the earlier historical OOS is burned
+and the period from 2026-10-01 is reserved for forward certification.
+The unchanged minimum official generated signal is 3.00 net R (30000 bps).
+Four R and above is an outcome diagnostic, not a new qualification floor.
+Costs are the corrected baseline's 5 bps fee + 1 bps adverse slippage + 1 bps
+spread per side. Actual archived funding events are applied to held research trades
+causally; the model uses entry notional because settlement mark prices are unavailable.
+Alpha research does not await final live equity, portfolio caps, risk groups, quantity
+step, FX conversion, or venue execution metadata. The shared decision engine was
+replayed with an explicit permissive research-only USDT context to exercise its full
+path; qualification was counted before portfolio/sizing. No signal was suppressed
+by this context. Independent signal-level outcomes allow overlapping symbols.
+Production values remain unresolved in PRODUCTION_STRATEGY_CONFIG_V1_CANDIDATE.json.
+
+2. OFFICIAL DATA, AVAILABILITY, AND QUALITY
+Official monthly Binance Public Data ZIPs and adjacent .CHECKSUM SHA-256 files were
+verified for all listed periods. BTC uses the prior 405-archive RESEARCH_TARGET_V1
+manifest; the seven new symbols use 2,760 monthly archives. Ten additional official
+daily ZIPs and checksums fill exactly 480 missing monthly 15m bars each for SOL and
+XRP (2022-02-26 to 2022-03-01 and 2022-04-01 to 2022-04-03, UTC). No data was
+fabricated. Higher-timeframe archives are checksum-verified QA references only.
+CORE_UNIVERSE_DATA_MANIFEST_V1.json records each new archive URL, checksum, size,
+and per-symbol row count, source start/end, normalized and canonical checksums, missing intervals,
+and published-versus-canonical QA conflicts; RESEARCH_TARGET_V1.json does so for BTC.
+Large ZIPs, normalized candles, replay rows, and trade paths remain ignored local data.
+symbol | first official 15m | replay start | 15m rows | 1h cycles | funding rows | daily gap-fill rows | 15m SHA-256
+BTCUSDT | 2020-01-01T00:00:00Z | 2020-01-01T00:00:00Z | 236640 | 59160 | 7395 | 0 | fd7024414f19ccd2ad11044e02ff980717bb9f1826731c68dd9d97990cd54d75
+ETHUSDT | 2020-01-01T00:00:00Z | 2020-01-01T00:00:00Z | 236640 | 59160 | 7395 | 0 | 4f52c7fbdec5dc69b217fa855418b53153f4fa1fbd16bb2eccaf3f7eaa71e77a
+BNBUSDT | 2020-02-10T08:00:00Z | 2020-02-11T00:00:00Z | 232704 | 58176 | 7274 | 0 | 6defb4f121dd5855785ab53860ab1e143d6dc0dd1baa90ea9a59a62d4c9afebb
+SOLUSDT | 2020-09-14T07:00:00Z | 2020-09-15T00:00:00Z | 211872 | 52968 | 6700 | 480 | bf53f632831b8b948a3882c2a118f0a273fcf457ba35e5f14153853a097add15
+XRPUSDT | 2020-01-06T08:15:00Z | 2020-01-07T00:00:00Z | 236064 | 59016 | 7379 | 480 | e063b99a5d1c170d685c32b4ca919c5fd9db8859b99776b36592503d4a9af3b6
+ADAUSDT | 2020-01-31T08:00:00Z | 2020-02-01T00:00:00Z | 233664 | 58416 | 7339 | 0 | 4591f5ba1c2874d20a58aa7e320a8a77c2edefc72d2b8c72e6ed0202c21dd096
+DOGEUSDT | 2020-07-10T09:00:00Z | 2020-07-11T00:00:00Z | 218208 | 54552 | 6821 | 0 | 3e82943c3d09c940ed46e7896d287bcfcc0d86f4583b99292145889852b195b5
+LINKUSDT | 2020-01-17T08:00:00Z | 2020-01-18T00:00:00Z | 235008 | 58752 | 7346 | 0 | 414743d6168f2bf4298a7e6afc9084f176c5479869582ea6a87a620a8e7f2a69
+
+All canonical 15m paths are gap-free from the listed replay start through
+2026-10-01T00:00:00Z exclusive. A partial initial UTC day, if present,
+is omitted to permit complete 1d context; the first official 15m timestamp
+is reported separately above. No pre-listing data is synthesized.
+Higher-timeframe official QA: conflicts then missing reference bars
+(1h/4h/1d bars; comparisons include volume). Missing bars are never
+counted as agreeing observations:
+BTCUSDT | conflicts | 4 | 4 | 4 | missing | 0 | 0 | 0
+ETHUSDT | conflicts | 3 | 4 | 4 | missing | 0 | 0 | 0
+BNBUSDT | conflicts | 3 | 3 | 3 | missing | 0 | 0 | 0
+SOLUSDT | conflicts | 2 | 3 | 3 | missing | 120 | 30 | 5
+XRPUSDT | conflicts | 7 | 5 | 6 | missing | 120 | 30 | 5
+ADAUSDT | conflicts | 3 | 4 | 3 | missing | 0 | 0 | 0
+DOGEUSDT | conflicts | 2 | 3 | 3 | missing | 0 | 0 | 0
+LINKUSDT | conflicts | 2 | 3 | 4 | missing | 0 | 0 | 0
+The canonical path retains 15m authority when official aggregate ZIPs differ.
+SOL funding has one archived interval anomaly (previous 1668038400006 ms,
+next 1668052800011 ms); none of its six executed trades overlaps that gap.
+The anomaly remains recorded and no funding value was substituted.
+
+3. SHARED-ENGINE DECISION FUNNEL
+Every closed decision bar passed through shared RealtimeAnalysisEngine and
+RealtimeDecisionEngine. Every sole confirmed candidate's structural risk
+result was independently re-invoked through shared qualifyStructuralRisk
+and required to match the published decision exactly.
+symbol | cycles | setup candidates | confirmed | no target | below 3R | cost blocked | signal eligible | executed | other structural rejection
+BTCUSDT | 59160 | 2059 | 205 | 150 | 46 | 5 | 4 | 4 | 0
+ETHUSDT | 59160 | 2116 | 189 | 132 | 50 | 2 | 5 | 5 | 0
+BNBUSDT | 58176 | 2102 | 234 | 163 | 59 | 9 | 3 | 3 | 0
+SOLUSDT | 52968 | 1977 | 218 | 161 | 50 | 1 | 6 | 6 | 0
+XRPUSDT | 59016 | 1988 | 229 | 172 | 54 | 3 | 0 | 0 | 0
+ADAUSDT | 58416 | 2004 | 224 | 171 | 47 | 1 | 4 | 4 | 1
+DOGEUSDT | 54552 | 1991 | 188 | 132 | 51 | 1 | 4 | 4 | 0
+LINKUSDT | 58752 | 2146 | 225 | 173 | 46 | 0 | 6 | 6 | 0
+TOTAL | 460200 | 16383 | 1712 | 1254 | 403 | 22 | 32 | 32 | 1
+The one other rejection is ADAUSDT INVALID_STRUCTURAL_INVALIDATION:
+entry and stop coincide, so no valid risk distance exists. Multiple actionable
+candidates = 0. Confirmed reconciliation: 1254 + 403 + 22 + 32 + 1 = 1712.
+
+4. STRUCTURAL TARGET COVERAGE
+symbol | confirmed | valid target | coverage % | no-target % | below-RR % | executable %
+BTCUSDT | 205 | 55 | 26.829268 | 73.170732 | 22.439024 | 1.951220
+ETHUSDT | 189 | 57 | 30.158730 | 69.841270 | 26.455026 | 2.645503
+BNBUSDT | 234 | 71 | 30.341880 | 69.658120 | 25.213675 | 1.282051
+SOLUSDT | 218 | 57 | 26.146789 | 73.853211 | 22.935780 | 2.752294
+XRPUSDT | 229 | 57 | 24.890830 | 75.109170 | 23.580786 | 0.000000
+ADAUSDT | 224 | 52 | 23.214286 | 76.339286 | 20.982143 | 1.785714
+DOGEUSDT | 188 | 56 | 29.787234 | 70.212766 | 27.127660 | 2.127660
+LINKUSDT | 225 | 52 | 23.111111 | 76.888889 | 20.444444 | 2.666667
+TOTAL | 1712 | 457 | 26.693925 | 73.247664 | 23.539720 | 1.869159
+Percentages use confirmed candidates as denominator. The one invalid-stop
+case has no valid target but is separately classified, so the structural
+NO_STRUCTURAL_TARGET count is one below confirmed minus valid-target count.
+Exact no-target reason distribution: SOLE_SAME_SIDE_LEVEL_BROKEN = 1254/1254,
+across all eight instruments; every other no-target machine reason = 0.
+The source excludes a level after it is BROKEN. No resolved level was
+reclassified as a target, and the target finder missed no eligible level.
+
+5. UNTUNED SIGNAL-LEVEL PERFORMANCE
+The modeled next 15m open is the entry, with adverse slippage and spread.
+A bar touching stop and target exits at the stop. Signals are simulated
+independently of live portfolio allocation. R includes stated costs and
+observed applicable funding. Sample counts accompany every statistic.
+symbol | N | win rate | expectancy R | profit factor | avg win R | avg loss R | median R | total R | max DD R | 4R+ rate | avg MFE R | avg MAE R
+BTCUSDT | 4 | 0.000000 | -1.071038 | 0.000000 | N/A | -1.071038 | -1.068502 | -4.284151 | 4.284151 | 0.000000 | 0.000000 | 0.645060
+ETHUSDT | 5 | 0.000000 | -1.053841 | 0.000000 | N/A | -1.053841 | -1.045858 | -5.269206 | 5.269206 | 0.000000 | 0.395002 | 0.731094
+BNBUSDT | 3 | 0.000000 | -1.074936 | 0.000000 | N/A | -1.074936 | -1.085888 | -3.224808 | 3.224808 | 0.000000 | 0.000000 | 0.625486
+SOLUSDT | 6 | 0.000000 | -1.107911 | 0.000000 | N/A | -1.107911 | -1.070538 | -6.647464 | 6.647464 | 0.000000 | 0.932256 | 0.689630
+XRPUSDT | 0 | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A
+ADAUSDT | 4 | 0.000000 | -1.075930 | 0.000000 | N/A | -1.075930 | -1.081472 | -4.303720 | 4.303720 | 0.000000 | 0.000000 | 0.620099
+DOGEUSDT | 4 | 0.250000 | 0.280420 | 1.347524 | 4.349310 | -1.075877 | -1.054322 | 1.121680 | 3.227630 | 0.250000 | 1.152682 | 0.562362
+LINKUSDT | 6 | 0.000000 | -1.062981 | 0.000000 | N/A | -1.062981 | -1.060990 | -6.377886 | 6.377886 | 0.000000 | 0.795849 | 0.685594
+TOTAL | 32 | 0.031250 | -0.905799 | 0.130473 | 4.349310 | -1.075318 | -1.067740 | -28.985555 | 33.334865 | 0.031250 | 0.529824 | 0.659167
+Aggregate maximum drawdown orders trade closes by UTC exit time, then the
+fixed universe order for ties. Win = 1/32, loss = 31/32. The sole 4R+
+realized outcome occurs on DOGEUSDT (N=4); no tiny symbol sample is ranked.
+BTCUSDT's four fills, exact entry/exit prices, net R, MFE and MAE reproduce
+the earlier corrected BTC baseline. This is still a historical fill model,
+not live execution evidence. Aggregate SAMPLE_ADEQUACY = INSUFFICIENT (32).
+
+6. COUNTERFACTUAL REJECTED-CANDIDATE PATHS - DIAGNOSTIC ONLY
+For each NO_STRUCTURAL_TARGET and BELOW_RR candidate, scan 15m OHLC from
+the next bar until first invalidation touch or data end. Favorable excursion
+on the stop bar uses only its open as a conservative lower bound; its full
+wick is an upper bound. R divides by gross entry-reference-to-stop distance.
+These are not fills, approved targets, cost-net returns, or executed trades.
+symbol | no-target N | no-target 1R/2R/3R/4R+ lower | below-RR N | below-RR 1R/2R/3R/4R+ lower
+BTCUSDT | 150 | 60/36/21/17 | 46 | 21/16/12/9
+ETHUSDT | 132 | 52/34/23/16 | 50 | 19/9/7/5
+BNBUSDT | 163 | 67/44/37/31 | 59 | 23/14/12/10
+SOLUSDT | 161 | 70/50/38/30 | 50 | 15/10/7/6
+XRPUSDT | 172 | 83/51/37/30 | 54 | 31/21/16/14
+ADAUSDT | 171 | 85/54/42/34 | 47 | 27/17/11/7
+DOGEUSDT | 132 | 69/45/32/26 | 51 | 25/18/11/10
+LINKUSDT | 173 | 87/64/48/38 | 46 | 19/11/10/10
+NO_STRUCTURAL_TARGET: N=1254; conservative 1/2/3/4R+ 573/378/278/222; stopped=1243; censored=11; median MFE=0.828717R; mean MAE=0.996093R; maximum observed conservative available R=26625.700000.
+NET_RR_BELOW_MINIMUM: N=403; conservative 1/2/3/4R+ 180/116/86/71; stopped=402; censored=1; median MFE=0.727273R; mean MAE=0.999735R; maximum observed conservative available R=242.604689.
+NO_TARGET_3R_PLUS_MFE_RATE = 278/1254 = 22.17%; NO_TARGET_4R_PLUS_MFE_RATE
+= 222/1254 = 17.70%. Among the 1243 stopped no-target paths, 267 (21.48%)
+reach 3R+ and 211 (16.98%) reach 4R+ conservatively. Eleven remain right
+censored. BELOW_RR 3R+ = 86/403 (21.34%); 4R+ = 71/403 (17.62%).
+Unusually large MFE values from long or tiny-stop paths are path excursions,
+not realizable return estimates; censored paths are disclosed separately.
+Per-candidate MFE/MAE, maximum available conservative R, and censoring
+are retained in ignored candidate_diagnostics.json for each symbol.
+
+7. SUFFICIENCY, CROSS-INSTRUMENT MECHANISM, AND NEXT ACTION
+CROSS_INSTRUMENT_BOTTLENECK = COMMON_ACROSS_UNIVERSE. Target coverage spans
+23.11%-30.34% and eligible execution spans 0%-2.75% of confirmed cases;
+SOLE_SAME_SIDE_LEVEL_BROKEN is the exact no-target reason in every symbol.
+The 267 stopped no-target paths that later reach 3R+ conservatively show a
+specific cross-symbol opportunity-generation mechanism worth investigating.
+They do not establish an executable target or alpha. The 32 executed trades
+are below the task's 50-trade restriction and below USABLE_BASELINE.
+ALPHA_OPTIMIZATION_CAN_START = NO. No parameter search, symbol selection,
+timeframe change, 4R gate, or live-production activation occurred.
+NEXT_REQUIRED_ACTION = OPPORTUNITY_GENERATION_REDESIGN: preregister a causal
+unconsumed structural-target source for the sole-BROKEN-level cases, then
+test it on the fixed eight-symbol universe under the same 3.00 net-R floor
+and costs. Preserve this untuned baseline as the comparison.
+
+8. VALIDATION AND BOUNDARIES
+Research/data tests: 25 Python tests passed; 2 causal-account Node tests
+passed. Shared regime, structure, setup, risk, real-time analysis and
+decision: 204 targeted Vitest tests passed. Candle aggregation/backtest:
+35 targeted Vitest tests passed. Root TypeScript build passed.
+The replay checks policy equality, canonical checksums, every analysis
+as-of/frame close, shared decision/risk equality, and funnel reconciliation.
+No Phase33C suite was run. git diff --check passed.
+Funding lacks settlement mark prices. The OHLC model cannot prove order
+within a 15m bar, order-book fills, impact, or partial fills. The old
+historical OOS was inspected, and no pristine historical OOS remains.
+PRODUCTION_LIVE_STRATEGY_CONFIG_READY = NO; READY_ALLOWED = NO;
+PRODUCTION_READY = NO. This audit certifies only the frozen research
+policy, fixed-source replay, and measured opportunity sufficiency.

@@ -48,22 +48,26 @@ def median_decimal(values):
             if len(ordered) % 2 == 0 else ordered[midpoint])
 
 
-def path_diagnostic(row, candles):
+def path_diagnostic(row, candles, *, start=None, cutoff=None):
     """Conservative favorable path to first stop touch, or dataset censoring."""
+    if start is None:
+        start = START
+    if cutoff is None:
+        cutoff = CUTOFF
     entry = decimal(row["entryReferencePrice"])
     stop = decimal(row["invalidationPrice"])
     direction = 1 if row["direction"] == "UP" else -1
     gross_risk = direction * (entry - stop)
     if gross_risk <= 0:
         raise ValueError("Invalid entry/invalidation direction")
-    start_index = (row["asOf"] - START) // QUARTER
+    start_index = (row["asOf"] - start) // QUARTER
     if start_index < 0 or start_index >= len(candles) or candles[start_index]["openTime"] != row["asOf"]:
         raise ValueError("Missing aligned next 15m bar")
     mfe_lower = mfe_upper = mae_lower = Decimal(0)
     stopped_at = None
     bars = 0
     for candle in islice(candles, start_index, None):
-        if candle["closeTime"] > CUTOFF:
+        if candle["closeTime"] > cutoff:
             raise ValueError("Future holdout entered counterfactual path")
         opened, high, low = map(decimal, (candle["open"], candle["high"], candle["low"]))
         bars += 1

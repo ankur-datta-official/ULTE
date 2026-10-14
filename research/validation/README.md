@@ -1,5 +1,44 @@
 # Alpha baseline validation input
 
+## Task058 fixed core-universe research baseline
+
+`ALPHA_RESEARCH_POLICY_V1.json` freezes the untuned Task056 alpha-sensitive
+settings, the Binance USD-M 1h/4h/1d roles, the canonical 15m path, the
+3.00 net-R floor, costs, the eight-symbol product universe, and the historical
+cutoff. It is a research policy, not an approved production strategy config.
+The root `TRADING_INTELLIGENCE_CORE_UNIVERSE_BASELINE_AUDIT.txt` is the
+authoritative universe result. `CORE_UNIVERSE_DATA_MANIFEST_V1.json` records
+official archive checksums and per-symbol data quality. Raw ZIPs, normalized
+candles, and per-symbol replay/result JSON remain ignored under
+`research/data/core_universe_v1/`.
+
+From the repo root, after building the shared TypeScript packages:
+
+```text
+python research/validation/download_core_universe.py
+python research/validation/download_core_gap_days.py
+python research/validation/prepare_core_universe.py
+node research/validation/replay_core_universe.mjs
+python research/validation/summarize_core_universe.py
+python research/validation/write_core_universe_audit.py
+```
+
+The downloader reads Binance's official archive index and verifies each ZIP
+against its adjacent published SHA-256 checksum. The gap-day step inspects
+verified monthly 15m rows and fetches official daily ZIPs only for complete,
+day-aligned missing intervals. Preparation fails if the official daily rows
+do not cover a gap exactly. Published higher timeframes are checked where
+present but never enter signal decisions. The replay calls the actual shared
+regime, structure, setup, decision, and risk engines for every closed 1h
+cycle; the 15m path is read separately for outcome and counterfactual MFE/MAE.
+Signal eligibility precedes research-only portfolio/sizing context, so
+otherwise eligible signals are not removed by provisional live limits.
+
+BTC uses the earlier verified `RESEARCH_TARGET_V1.json` and local Task056
+canonical data; its four baseline fills and R values are reproduced exactly.
+No market-data open or funding event timestamp from 2026-10-01 onward is
+permitted. The last pre-cutoff bar closes at that exclusive boundary.
+
 ## Task056 integrity status
 
 The authoritative conclusion is `TRADING_INTELLIGENCE_PRODUCTION_EQUIVALENT_BASELINE_AUDIT.txt`
